@@ -12,7 +12,9 @@ namespace {
 const std::string DATA_DIR = "data";
 const std::string FILE_PATH = DATA_DIR + "/warnings.json";
 
-std::mutex mtx;
+// recursive so that save() can be called from within functions that
+// already hold the lock (add -> save).
+std::recursive_mutex mtx;
 nlohmann::json db = nlohmann::json::object();
 bool loaded = false;
 
@@ -31,7 +33,7 @@ std::string key(dpp::snowflake guild_id, dpp::snowflake user_id) {
 } // namespace
 
 void load() {
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::recursive_mutex> lock(mtx);
     if (loaded) {
         return;
     }
@@ -50,7 +52,7 @@ void load() {
 }
 
 void save() {
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::recursive_mutex> lock(mtx);
     ensure_dir();
     std::ofstream file(FILE_PATH, std::ios::trunc);
     if (!file.is_open()) {
@@ -62,7 +64,7 @@ void save() {
 
 size_t add(dpp::snowflake guild_id, dpp::snowflake user_id,
            const std::string& reason, dpp::snowflake moderator) {
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::recursive_mutex> lock(mtx);
 
     nlohmann::json& guild_arr = db[key(guild_id, user_id)];
 
@@ -87,7 +89,7 @@ size_t add(dpp::snowflake guild_id, dpp::snowflake user_id,
 }
 
 std::vector<entry> get(dpp::snowflake guild_id, dpp::snowflake user_id) {
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::recursive_mutex> lock(mtx);
     std::vector<entry> out;
 
     auto it = db.find(key(guild_id, user_id));
@@ -106,7 +108,7 @@ std::vector<entry> get(dpp::snowflake guild_id, dpp::snowflake user_id) {
 }
 
 size_t count(dpp::snowflake guild_id, dpp::snowflake user_id) {
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::recursive_mutex> lock(mtx);
     auto it = db.find(key(guild_id, user_id));
     if (it == db.end() || !it->is_array()) {
         return 0;
@@ -115,7 +117,7 @@ size_t count(dpp::snowflake guild_id, dpp::snowflake user_id) {
 }
 
 size_t clear(dpp::snowflake guild_id, dpp::snowflake user_id) {
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::recursive_mutex> lock(mtx);
     auto it = db.find(key(guild_id, user_id));
     if (it == db.end()) {
         return 0;

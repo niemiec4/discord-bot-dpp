@@ -55,7 +55,7 @@ int main() {
         co_return;
     });
 
-    bot.on_ready([&bot](const dpp::ready_t&) {
+    bot.on_ready([&bot](const dpp::ready_t&) -> dpp::task<void> {
         if (dpp::run_once<struct register_bot_commands>()) {
             std::vector<dpp::slashcommand> commands = cmd::build_definitions(bot);
 
@@ -78,12 +78,27 @@ int main() {
                         std::cout << "✅ Registered " << count << " global commands\n";
                     }
                 });
+
+                // Remove stale guild-scoped commands (leftovers from older builds / testing)
+                // so they don't show up as duplicates next to the global ones.
+                // Wait a few seconds first so the guild cache is fully populated.
+                co_await bot.co_sleep(5);
+                dpp::cache<dpp::guild>* gc = dpp::get_guild_cache();
+                std::shared_lock lock(gc->get_mutex());
+                size_t cleared = 0;
+                for (const auto& [gid, g] : gc->get_container()) {
+                    bot.guild_bulk_command_create({}, gid);
+                    ++cleared;
+                }
+                bot.log(dpp::ll_info, "Cleared guild-scoped commands on " + std::to_string(cleared) +
+                                      " guild(s) to avoid duplicates");
             }
 
             // Status: online with a custom activity pointing to /help
             dpp::presence presence(dpp::ps_online, dpp::at_custom, "🚀 Modern D++ bot | /help");
             bot.set_presence(presence);
         }
+        co_return;
     });
 
     // Per-server welcome messages (customizable via /settings welcome).

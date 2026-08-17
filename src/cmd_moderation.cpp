@@ -1,5 +1,6 @@
 #include "commands.h"
 
+#include "settings.h"
 #include "warnings.h"
 
 #include <algorithm>
@@ -306,11 +307,47 @@ dpp::task<void> cmd_warn(dpp::cluster& bot, const dpp::slashcommand_t& event) {
     std::string name = util::escape(target_member.get_nickname());
     size_t total = warns::add(guild->id, target_id, reason, event.command.usr.id);
 
+    // Auto-punishment: when the member reaches the configured warning threshold.
+    settings::guild_settings s = settings::get(guild->id);
+    std::string punishment;
+    if (s.warn_threshold > 0 && total >= s.warn_threshold) {
+        switch (s.warn_action) {
+            case 1: { // timeout
+                uint64_t minutes = s.warn_timeout_minutes > 0 ? s.warn_timeout_minutes : 60;
+                time_t until = time(nullptr) + static_cast<time_t>(minutes * 60);
+                dpp::confirmation_callback_t res = co_await bot.co_guild_member_timeout(guild->id, target_id, until);
+                punishment = res.is_error()
+                    ? "auto-timeout failed (" + res.get_error().human_readable + ")"
+                    : "🔇 auto-timed out for " + std::to_string(minutes) + " minute(s)";
+                break;
+            }
+            case 2: { // kick
+                dpp::confirmation_callback_t res = co_await bot.co_guild_member_delete(guild->id, target_id);
+                punishment = res.is_error()
+                    ? "auto-kick failed (" + res.get_error().human_readable + ")"
+                    : "👢 auto-kicked";
+                break;
+            }
+            case 3: { // ban
+                dpp::confirmation_callback_t res = co_await bot.co_guild_ban_add(guild->id, target_id);
+                punishment = res.is_error()
+                    ? "auto-ban failed (" + res.get_error().human_readable + ")"
+                    : "🔨 auto-banned";
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
     dpp::embed e = util::base_embed(bot, "⚠️ User Warned", util::COLOR_WARNING)
         .set_description("**" + name + "** has been warned.")
         .add_field("Moderator", event.command.usr.get_mention(), true)
         .add_field("Reason", reason.empty() ? "No reason provided" : util::escape(reason), true)
         .add_field("Total warnings", std::to_string(total), true);
+    if (!punishment.empty()) {
+        e.add_field("Auto-punishment", punishment);
+    }
 
     util::send_log(bot, guild->id, e);
     co_await event.co_reply(dpp::message(e));

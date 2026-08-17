@@ -10,7 +10,7 @@ with colorful embeds, coroutines and moderation logging.
 |---|---|
 | 🛡️ **Moderation** | `/kick`, `/ban`, `/unban`, `/timeout`, `/purge`, `/warn`, `/warnings`, `/clearwarns` |
 | ℹ️ **Information** | `/ping`, `/help`, `/botinfo`, `/serverinfo`, `/userinfo`, `/avatar`, `/servericon`, `/roleinfo`, `/invite`, `/sync` |
-| ⚙️ **Server settings** | `/settings show`, `/settings logchannel`, `/settings welcome`, `/settings welcomemessage`, `/settings leveling`, `/settings levelupchannel`, `/settings levelupmessage`, `/settings rewardadd`, `/settings rewardremove` |
+| ⚙️ **Server settings** | `/settings show`, `logchannel`, `welcome`, `welcomemessage`, `leveling`, `levelupchannel`, `levelupmessage`, `rewardadd`, `rewardremove`, `warnthreshold`, `warnaction`, `warntimeout`, `xpmult`, `xpmultremove`, `xpboost` |
 | 📈 **Levels** | `/rank`, `/top` |
 | 🎉 **Fun** | `/8ball`, `/coinflip`, `/dice`, `/say`, `/embed` |
 
@@ -27,6 +27,11 @@ Highlights:
   welcome message, leveling on/off, level-up channel and role rewards via `/settings`.
 - **Leveling system** — chat to earn XP (one gain per user per minute), level up with
   progress bars (`/rank`) and a leaderboard (`/top`), plus automatic role rewards.
+- **Auto-punishment** — when a member reaches a configurable warning threshold
+  (`/settings warnthreshold` + `/settings warnaction`), the bot automatically
+  times them out, kicks, or bans them.
+- **XP multipliers** — per-role multipliers (`/settings xpmult`) and a booster
+  bonus (`/settings xpboost`) make leveling fair and rewarding.
 - **C++20 coroutines** — clean, sequential async code instead of nested callbacks.
 - **Consistent embed style** — footer with the bot's name and avatar, timestamps,
   semantic colors.

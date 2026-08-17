@@ -71,12 +71,21 @@ dpp::task<void> cmd_help(dpp::cluster& bot, const dpp::slashcommand_t& event) {
     e.add_field("🛡️ Moderation",
                 "`kick`, `ban`, `unban`, `timeout`, `purge`, `warn`, `warnings`, `clearwarns`");
     e.add_field("ℹ️ Information",
-                "`ping`, `help`, `botinfo`, `serverinfo`, `userinfo`, `avatar`, `servericon`, `roleinfo`, `invite`");
+                "`ping`, `help`, `botinfo`, `serverinfo`, `userinfo`, `avatar`, `servericon`, `roleinfo`, `invite`, `sync`");
+    e.add_field("⚙️ Server settings",
+                "`settings show`, `settings logchannel`, `settings welcome`, `settings welcomemessage`, "
+                "`settings leveling`, `settings levelupchannel`, `settings levelupmessage`, "
+                "`settings rewardadd`, `settings rewardremove`, `settings warnthreshold`, "
+                "`settings warnaction`, `settings warntimeout`, `settings xpmult`, "
+                "`settings xpmultremove`, `settings xpboost`");
+    e.add_field("📈 Levels",
+                "`rank`, `top` — earn XP by chatting (per-server on/off via `/settings leveling`)");
     e.add_field("🎉 Fun",
                 "`8ball`, `coinflip`, `dice`, `say`, `embed`");
     e.add_field("📌 Tip",
                 "Moderation commands require the matching Discord permission "
-                "(`Kick Members`, `Ban Members`, `Moderate Members`, `Manage Messages`).");
+                "(`Kick Members`, `Ban Members`, `Moderate Members`, `Manage Messages`). "
+                "All `/settings` values are per-server.");
 
     co_await event.co_reply(dpp::message(e));
     co_return;
@@ -332,6 +341,13 @@ dpp::task<void> cmd_sync(dpp::cluster& bot, const dpp::slashcommand_t& event) {
         // Sync globally (replaces the whole global list, removing stale commands).
         res = co_await bot.co_global_bulk_command_create(commands);
         scope = "global";
+
+        // Remove stale guild-scoped commands so they don't duplicate the global ones.
+        dpp::cache<dpp::guild>* gc = dpp::get_guild_cache();
+        std::shared_lock lock(gc->get_mutex());
+        for (const auto& [gid, g] : gc->get_container()) {
+            bot.guild_bulk_command_create({}, gid);
+        }
     }
 
     if (res.is_error()) {

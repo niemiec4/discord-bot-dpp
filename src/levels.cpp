@@ -19,7 +19,9 @@ namespace {
 const std::string DATA_DIR = "data";
 const std::string FILE_PATH = DATA_DIR + "/levels.json";
 
-std::mutex mtx;
+// recursive so that save() can be called from within functions that
+// already hold the lock (add_xp -> save).
+std::recursive_mutex mtx;
 nlohmann::json db = nlohmann::json::object();
 bool loaded = false;
 
@@ -46,7 +48,7 @@ std::string key(dpp::snowflake guild_id, dpp::snowflake user_id) {
 } // namespace
 
 void load() {
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::recursive_mutex> lock(mtx);
     if (loaded) {
         return;
     }
@@ -65,7 +67,7 @@ void load() {
 }
 
 void save() {
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::recursive_mutex> lock(mtx);
     ensure_dir();
     std::ofstream file(FILE_PATH, std::ios::trunc);
     if (!file.is_open()) {
@@ -88,7 +90,7 @@ uint64_t xp_for_level(uint64_t level) {
 }
 
 user_level get(dpp::snowflake guild_id, dpp::snowflake user_id) {
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::recursive_mutex> lock(mtx);
 
     user_level out;
     auto it = db.find(key(guild_id, user_id));
@@ -105,7 +107,7 @@ user_level get(dpp::snowflake guild_id, dpp::snowflake user_id) {
 }
 
 uint64_t add_xp(dpp::snowflake guild_id, dpp::snowflake user_id, uint64_t amount) {
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::recursive_mutex> lock(mtx);
 
     std::string k = key(guild_id, user_id);
     uint64_t xp = db.value(k, uint64_t(0)) + amount;
@@ -115,7 +117,7 @@ uint64_t add_xp(dpp::snowflake guild_id, dpp::snowflake user_id, uint64_t amount
 }
 
 std::vector<std::pair<dpp::snowflake, user_level>> top(dpp::snowflake guild_id, size_t limit) {
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::recursive_mutex> lock(mtx);
 
     std::vector<std::pair<dpp::snowflake, uint64_t>> raw;
     std::string prefix = std::to_string(static_cast<uint64_t>(guild_id)) + ":";
@@ -234,7 +236,7 @@ void handle_message(dpp::cluster& bot, const dpp::message& msg) {
 
     // Per-user cooldown.
     {
-        std::lock_guard<std::mutex> lock(mtx);
+        std::lock_guard<std::recursive_mutex> lock(mtx);
         time_t now = time(nullptr);
         auto it = last_gain.find(msg.author.id);
         if (it != last_gain.end() && now - it->second < XP_COOLDOWN) {
@@ -245,7 +247,22 @@ void handle_message(dpp::cluster& bot, const dpp::message& msg) {
 
     static std::mt19937 rng{std::random_device{}()};
     std::uniform_int_distribution<uint64_t> dist(XP_MIN, XP_MAX);
-    uint64_t amount = dist(rng);
+
+    // XP multipliers: best role multiplier wins, booster bonus stacks on top.
+    double mult = 1.0;
+    dpp::guild_member member = dpp::find_guild_member(msg.guild_id, msg.author.id);
+    if (member.user_id) {
+        for (const dpp::snowflake& role_id : member.get_roles()) {
+            auto it = s.role_multipliers.find(role_id);
+            if (it != s.role_multipliers.end()) {
+                mult = std::max(mult, it->second);
+            }
+        }
+        if (member.premium_since != 0 && s.booster_multiplier > 1.0) {
+            mult *= s.booster_multiplier;
+        }
+    }
+    uint64_t amount = std::max<uint64_t>(1ULL, static_cast<uint64_t>(std::llround(dist(rng) * mult)));
 
     uint64_t before = level_from_xp(get(msg.guild_id, msg.author.id).xp);
     uint64_t after = add_xp(msg.guild_id, msg.author.id, amount);

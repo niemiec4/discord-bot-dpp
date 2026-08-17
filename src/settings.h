@@ -22,6 +22,15 @@ struct guild_settings {
     dpp::snowflake levelup_channel_id{0};    // 0 = same channel as the message
     std::string levelup_message;             // empty = default template
     std::map<uint64_t, dpp::snowflake> role_rewards; // level -> role to grant
+
+    // Auto-punishment when a member reaches warn_threshold warnings.
+    uint64_t warn_threshold{0};              // 0 = disabled
+    int warn_action{0};                      // 0 = none, 1 = timeout, 2 = kick, 3 = ban
+    uint64_t warn_timeout_minutes{60};       // duration used when action == timeout
+
+    // XP multipliers.
+    std::map<dpp::snowflake, double> role_multipliers; // role id -> XP multiplier
+    double booster_multiplier{1.0};          // XP multiplier for server boosters (1.0 = off)
 };
 
 /** @brief Load settings from disk (idempotent). */

@@ -27,6 +27,23 @@ dpp::task<void> sub_show(dpp::cluster& bot, const dpp::slashcommand_t& event, dp
         }
     }
 
+    std::string multipliers;
+    if (s.role_multipliers.empty()) {
+        multipliers = "*(no role multipliers)*";
+    } else {
+        for (const auto& [role, mult] : s.role_multipliers) {
+            multipliers += "<@&" + std::to_string(static_cast<uint64_t>(role)) + "> → **x" +
+                           std::to_string(mult) + "**\n";
+        }
+    }
+
+    static const char* action_names[] = {"none", "timeout", "kick", "ban"};
+    std::string auto_punish = s.warn_threshold == 0
+        ? "*(disabled)*"
+        : "at **" + std::to_string(s.warn_threshold) + "** warning(s) → **" +
+          action_names[s.warn_action >= 0 && s.warn_action <= 3 ? s.warn_action : 0] + "**" +
+          (s.warn_action == 1 ? " (" + std::to_string(s.warn_timeout_minutes) + " min)" : "");
+
     dpp::embed e = util::base_embed(bot, "⚙️ Server Settings", util::COLOR_PRIMARY)
         .add_field("Moderation log channel", fmt_channel(s.log_channel_id), true)
         .add_field("Welcome channel", fmt_channel(s.welcome_channel_id), true)
@@ -34,7 +51,10 @@ dpp::task<void> sub_show(dpp::cluster& bot, const dpp::slashcommand_t& event, dp
         .add_field("Leveling", fmt_yes_no(s.leveling_enabled), true)
         .add_field("Level-up channel", fmt_channel(s.levelup_channel_id), true)
         .add_field("Level-up message", s.levelup_message.empty() ? "*(default)*" : util::escape(s.levelup_message))
-        .add_field("Role rewards", rewards);
+        .add_field("Role rewards", rewards)
+        .add_field("Auto-punishment", auto_punish, true)
+        .add_field("Booster XP bonus", s.booster_multiplier > 1.0 ? "**x" + std::to_string(s.booster_multiplier) + "**" : "*(off)*", true)
+        .add_field("Role XP multipliers", multipliers);
 
     co_await event.co_reply(dpp::message(e));
     co_return;
@@ -205,6 +225,114 @@ dpp::task<void> sub_reward_remove(const dpp::slashcommand_t& event, dpp::snowfla
     co_return;
 }
 
+dpp::task<void> sub_warnthreshold(const dpp::slashcommand_t& event, dpp::snowflake guild_id) {
+    int64_t threshold = util::get_integer(event, "count", 0);
+    threshold = std::clamp<int64_t>(threshold, 0, 100);
+
+    settings::guild_settings s = settings::get(guild_id);
+    s.warn_threshold = static_cast<uint64_t>(threshold);
+    settings::set(guild_id, s);
+
+    if (threshold == 0) {
+        co_await event.co_reply(util::success("Auto-punishment **disabled**. Members can be warned freely."));
+    } else {
+        co_await event.co_reply(util::success("Members will now be auto-punished when they reach **" +
+                                              std::to_string(threshold) + "** warning(s)."));
+    }
+    co_return;
+}
+
+dpp::task<void> sub_warnaction(const dpp::slashcommand_t& event, dpp::snowflake guild_id) {
+    int64_t action = util::get_integer(event, "action", 0);
+    action = std::clamp<int64_t>(action, 0, 3);
+
+    settings::guild_settings s = settings::get(guild_id);
+    s.warn_action = static_cast<int>(action);
+    settings::set(guild_id, s);
+
+    static const char* names[] = {"none", "timeout", "kick", "ban"};
+    co_await event.co_reply(util::success("Auto-punishment action set to **" + std::string(names[action]) + "**."));
+    co_return;
+}
+
+dpp::task<void> sub_warntimeout(dpp::cluster& bot, const dpp::slashcommand_t& event, dpp::snowflake guild_id) {
+    (void)bot;
+    int64_t minutes = util::get_integer(event, "minutes", 60);
+    minutes = std::clamp<int64_t>(minutes, 1, 40320); // max 28 days
+
+    settings::guild_settings s = settings::get(guild_id);
+    s.warn_timeout_minutes = static_cast<uint64_t>(minutes);
+    settings::set(guild_id, s);
+
+    co_await event.co_reply(util::success("Auto-timeout duration set to **" + std::to_string(minutes) +
+                                          " minute(s)**."));
+    co_return;
+}
+
+dpp::task<void> sub_xpmult(const dpp::slashcommand_t& event, dpp::snowflake guild_id) {
+    dpp::command_value raw_role = event.get_parameter("role");
+    if (!std::holds_alternative<dpp::snowflake>(raw_role)) {
+        co_await event.co_reply(util::error("You must pick a role."));
+        co_return;
+    }
+    dpp::command_value raw_mult = event.get_parameter("multiplier");
+    if (!std::holds_alternative<double>(raw_mult)) {
+        co_await event.co_reply(util::error("You must provide a multiplier (e.g. 1.5)."));
+        co_return;
+    }
+    double mult = std::clamp(std::get<double>(raw_mult), 0.1, 10.0);
+    dpp::snowflake role_id = std::get<dpp::snowflake>(raw_role);
+
+    settings::guild_settings s = settings::get(guild_id);
+    s.role_multipliers[role_id] = mult;
+    settings::set(guild_id, s);
+
+    co_await event.co_reply(util::success("Role <@&" + std::to_string(static_cast<uint64_t>(role_id)) +
+                                          "> now earns **x" + std::to_string(mult) + "** XP."));
+    co_return;
+}
+
+dpp::task<void> sub_xpmultremove(const dpp::slashcommand_t& event, dpp::snowflake guild_id) {
+    dpp::command_value raw_role = event.get_parameter("role");
+    if (!std::holds_alternative<dpp::snowflake>(raw_role)) {
+        co_await event.co_reply(util::error("You must pick a role."));
+        co_return;
+    }
+    dpp::snowflake role_id = std::get<dpp::snowflake>(raw_role);
+
+    settings::guild_settings s = settings::get(guild_id);
+    auto it = s.role_multipliers.find(role_id);
+    if (it == s.role_multipliers.end()) {
+        co_await event.co_reply(util::warning("That role has no XP multiplier."));
+        co_return;
+    }
+    s.role_multipliers.erase(it);
+    settings::set(guild_id, s);
+    co_await event.co_reply(util::success("Removed the XP multiplier for <@&" +
+                                          std::to_string(static_cast<uint64_t>(role_id)) + ">."));
+    co_return;
+}
+
+dpp::task<void> sub_xpboost(const dpp::slashcommand_t& event, dpp::snowflake guild_id) {
+    dpp::command_value raw_mult = event.get_parameter("multiplier");
+    if (!std::holds_alternative<double>(raw_mult)) {
+        co_await event.co_reply(util::error("You must provide a multiplier (e.g. 1.5)."));
+        co_return;
+    }
+    double mult = std::clamp(std::get<double>(raw_mult), 1.0, 10.0);
+
+    settings::guild_settings s = settings::get(guild_id);
+    s.booster_multiplier = mult;
+    settings::set(guild_id, s);
+
+    if (mult <= 1.0) {
+        co_await event.co_reply(util::success("Booster XP bonus **disabled**."));
+    } else {
+        co_await event.co_reply(util::success("Server boosters now earn **x" + std::to_string(mult) + "** XP."));
+    }
+    co_return;
+}
+
 } // namespace
 
 void add_settings_commands(const dpp::cluster& bot,
@@ -251,6 +379,35 @@ void add_settings_commands(const dpp::cluster& bot,
     reward_remove.add_option(dpp::command_option(dpp::co_integer, "level", "Level to remove the reward for", true).set_min_value(1));
     settings_cmd.add_option(reward_remove);
 
+    dpp::command_option warnthreshold(dpp::co_sub_command, "warnthreshold", "Auto-punish at N warnings (0 = off).");
+    warnthreshold.add_option(dpp::command_option(dpp::co_integer, "count", "Warning count that triggers punishment (0 = off)", true).set_min_value(0).set_max_value(100));
+    settings_cmd.add_option(warnthreshold);
+
+    dpp::command_option warnaction(dpp::co_sub_command, "warnaction", "Action for auto-punishment.");
+    warnaction.add_option(dpp::command_option(dpp::co_integer, "action", "Action to take", true)
+        .add_choice(dpp::command_option_choice("None", static_cast<int64_t>(0)))
+        .add_choice(dpp::command_option_choice("Timeout", static_cast<int64_t>(1)))
+        .add_choice(dpp::command_option_choice("Kick", static_cast<int64_t>(2)))
+        .add_choice(dpp::command_option_choice("Ban", static_cast<int64_t>(3))));
+    settings_cmd.add_option(warnaction);
+
+    dpp::command_option warntimeout(dpp::co_sub_command, "warntimeout", "Duration of the auto-timeout.");
+    warntimeout.add_option(dpp::command_option(dpp::co_integer, "minutes", "Minutes (1-40320, max 28 days)", true).set_min_value(1).set_max_value(40320));
+    settings_cmd.add_option(warntimeout);
+
+    dpp::command_option xpmult(dpp::co_sub_command, "xpmult", "Set an XP multiplier for a role.");
+    xpmult.add_option(dpp::command_option(dpp::co_role, "role", "Role to boost", true));
+    xpmult.add_option(dpp::command_option(dpp::co_number, "multiplier", "Multiplier (0.1-10, e.g. 1.5 = 50% more XP)", true).set_min_value(0.1).set_max_value(10.0));
+    settings_cmd.add_option(xpmult);
+
+    dpp::command_option xpmultremove(dpp::co_sub_command, "xpmultremove", "Remove a role XP multiplier.");
+    xpmultremove.add_option(dpp::command_option(dpp::co_role, "role", "Role to unboost", true));
+    settings_cmd.add_option(xpmultremove);
+
+    dpp::command_option xpboost(dpp::co_sub_command, "xpboost", "XP bonus for server boosters.");
+    xpboost.add_option(dpp::command_option(dpp::co_number, "multiplier", "Multiplier (1.0 = off, e.g. 1.5)", true).set_min_value(1.0).set_max_value(10.0));
+    settings_cmd.add_option(xpboost);
+
     definitions.emplace_back(settings_cmd);
     handlers["settings"] = make_handler([](dpp::cluster& bot, const dpp::slashcommand_t& event) -> dpp::task<void> {
         if (!util::require_permission(event, dpp::p_manage_guild, "Manage Server")) {
@@ -280,7 +437,13 @@ void add_settings_commands(const dpp::cluster& bot,
         else if (sub == "levelupmessage") co_await sub_levelupmessage(event, guild_id);
         else if (sub == "rewardadd")  co_await sub_reward_add(bot, event, guild_id);
         else if (sub == "rewardremove") co_await sub_reward_remove(event, guild_id);
-        else                          co_await sub_show(bot, event, guild_id);
+        else if (sub == "warnthreshold") co_await sub_warnthreshold(event, guild_id);
+        else if (sub == "warnaction") co_await sub_warnaction(event, guild_id);
+        else if (sub == "warntimeout") co_await sub_warntimeout(bot, event, guild_id);
+        else if (sub == "xpmult")     co_await sub_xpmult(event, guild_id);
+        else if (sub == "xpmultremove") co_await sub_xpmultremove(event, guild_id);
+        else if (sub == "xpboost")    co_await sub_xpboost(event, guild_id);
+        else                           co_await sub_show(bot, event, guild_id);
 
         co_return;
     });
