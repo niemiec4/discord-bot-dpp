@@ -1,79 +1,94 @@
 # 🤖 Discord Bot (D++ / dpp)
 
-Nowoczesny, funkcjonalny bot Discord napisany w C++20 z użyciem biblioteki
-[**D++ (dpp)**](https://dpp.dev). Wszystko oparte na slash commands
-(„ukośnikowych” komendach), z kolorowymi embedami, korutynami i logowaniem akcji moderacji.
+A modern, feature-rich Discord bot written in C++20 using the
+[**D++ (dpp)**](https://dpp.dev) library. Everything is driven by slash commands,
+with colorful embeds, coroutines and moderation logging.
 
-## ✨ Funkcje
+## ✨ Features
 
-| Kategoria | Komendy |
+| Category | Commands |
 |---|---|
-| 🛡️ **Moderacja** | `/kick`, `/ban`, `/unban`, `/timeout`, `/purge`, `/warn`, `/warnings`, `/clearwarns` |
-| ℹ️ **Informacje** | `/ping`, `/help`, `/botinfo`, `/serverinfo`, `/userinfo`, `/avatar`, `/servericon`, `/roleinfo`, `/invite` |
-| 🎉 **Zabawa** | `/8ball`, `/coinflip`, `/dice`, `/say`, `/embed` |
+| 🛡️ **Moderation** | `/kick`, `/ban`, `/unban`, `/timeout`, `/purge`, `/warn`, `/warnings`, `/clearwarns` |
+| ℹ️ **Information** | `/ping`, `/help`, `/botinfo`, `/serverinfo`, `/userinfo`, `/avatar`, `/servericon`, `/roleinfo`, `/invite` |
+| 🎉 **Fun** | `/8ball`, `/coinflip`, `/dice`, `/say`, `/embed` |
 
-Wyróżniki:
+Highlights:
 
-- **Bezpieczna moderacja** — sprawdzanie uprawnień (również bota), hierarchii ról
-  oraz ochrona właściciela serwera przed kick/ban/timeout.
-- **System ostrzeżeń (`/warn`)** — trwały zapis do `data/warnings.json`, odporny na restart bota.
-- **Logi moderacji** — każde kick/ban/timeout/purge/warn ląduje w kanale z `LOG_CHANNEL_ID`.
-- **Powitalne wiadomości** — opcjonalne `/welcome` dla nowych użytkowników (`WELCOME_CHANNEL_ID`).
-- **Korutyny (C++20)** — czytelny, sekwencyjny kod asynchroniczny zamiast zagnieżdżonych callbacków.
-- **Jednolity styl embedów** — stopka z avatar i nazwą bota, znaczniki czasu, kolory semantyczne.
+- **Safe moderation** — checks the invoker's *and* the bot's permissions, enforces
+  the role hierarchy, and protects the server owner from kick/ban/timeout.
+- **Warning system (`/warn`)** — persisted to `data/warnings.json`, survives bot restarts.
+  Warnings are stored **per server and per user**, so each server keeps its own counts.
+- **Moderation logs** — every kick/ban/timeout/purge/warn is posted to the channel
+  from `LOG_CHANNEL_ID`.
+- **Welcome messages** — optional, posted to `WELCOME_CHANNEL_ID` when someone joins.
+- **C++20 coroutines** — clean, sequential async code instead of nested callbacks.
+- **Consistent embed style** — footer with the bot's name and avatar, timestamps,
+  semantic colors.
+- **One bot, every server** — globally registered commands + the `/invite` command
+  to add the bot anywhere.
 
-## 📦 Wymagania
+## 📦 Requirements
 
 - CMake ≥ 3.16
-- Kompilator z obsługą C++20 (GCC 11+, Clang 14+, MSVC 2022)
-- Biblioteka **D++ (dpp) ≥ 10.x** — zainstaluj zgodnie z [dokumentacją](https://dpp.dev/install.html)
+- A compiler with C++20 support (GCC 11+, Clang 14+, MSVC 2022)
+- **D++ (dpp) ≥ 10.x** — install per the [official docs](https://dpp.dev/install.html)
   (Linux: `sudo apt install libdpp-dev` / `dnf install dpp-devel`)
 
-## 🚀 Instalacja i uruchomienie
+## 🚀 Setup & run
 
 ```bash
-# 1. Skopiuj konfigurację i wpisz swój token bota
+# 1. Copy the config template and enter your bot token
 cp .env.example .env
 
-# 2. Zbuduj
+# 2. Build
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 
-# 3. Uruchom
+# 3. Run
 ./build/discord_bot
 ```
 
-### Konfiguracja (`.env`)
+### Configuration (`.env`)
 
-| Zmienna | Opis |
+| Variable | Description |
 |---|---|
-| `BOT_TOKEN` | Token bota z https://discord.com/developers/applications **(wymagane)** |
-| `GUILD_ID` | ID serwera — komendy rejestrują się natychmiast tylko tam. Puste = komendy globalne (do 1 h propagacji) |
-| `LOG_CHANNEL_ID` | Kanał z logami moderacji (opcjonalnie) |
-| `WELCOME_CHANNEL_ID` | Kanał z wiadomościami powitalnymi (opcjonalnie) |
+| `BOT_TOKEN` | Bot token from https://discord.com/developers/applications **(required)** |
+| `GUILD_ID` | Server ID — commands register instantly on that server only. Leave empty for global registration (up to 1 h propagation) |
+| `LOG_CHANNEL_ID` | Channel for moderation logs (optional) |
+| `WELCOME_CHANNEL_ID` | Channel for welcome messages (optional) |
 
-> ⚠️ **Privileged Intents** — w panelu deweloperskim bota (Bot → Privileged Gateway Intents)
-> włącz: **Presence Intent**, **Server Members Intent** oraz **Message Content Intent**.
+> ⚠️ **Privileged Intents** — in the developer portal (Bot → Privileged Gateway Intents)
+> enable **Presence Intent**, **Server Members Intent** and **Message Content Intent**.
 
-## 🗂️ Struktura projektu
+## 🌐 Running on multiple servers
+
+- One token = one bot instance that can be added to **any number of servers**.
+- Use `/invite` to generate an OAuth2 link (scopes `bot` + `applications.commands`)
+  with all the permissions the bot needs, then use it on each server.
+- Keep `GUILD_ID` **empty** so commands are registered globally and appear on
+  every server where the bot is present.
+- Warnings, `/warn`, `/warnings` and `/clearwarns` are fully **per-server**:
+  the same user has independent warning counts on each server.
+
+## 🗂️ Project structure
 
 ```
-├── main.cpp               # wejście: klaster, rejestracja komend, zdarzenia
+├── main.cpp               # entry point: cluster, command registration, events
 ├── CMakeLists.txt
-├── .env.example           # szablon konfiguracji
+├── .env.example           # configuration template
 └── src/
-    ├── config.h/.cpp      # wczytywanie .env
-    ├── bot_utils.h/.cpp   # embedy, uprawnienia, formatowanie, logi
-    ├── warnings.h/.cpp    # trwały system ostrzeżeń (JSON)
-    ├── commands.h/.cpp    # rejestr komend + dispatch
+    ├── config.h/.cpp      # .env loading
+    ├── bot_utils.h/.cpp   # embeds, permission checks, formatting, logs
+    ├── warnings.h/.cpp    # persistent warning system (JSON)
+    ├── commands.h/.cpp    # command registry + dispatch
     ├── cmd_moderation.cpp # kick, ban, unban, timeout, purge, warn…
     ├── cmd_utility.cpp    # ping, help, botinfo, serverinfo, userinfo…
     └── cmd_fun.cpp        # 8ball, coinflip, dice, say, embed
 ```
 
-## 🔧 Dodawanie nowej komendy
+## 🔧 Adding a new command
 
-1. Napisz handler w odpowiednim pliku `cmd_*.cpp`, np.:
+1. Write a handler in the appropriate `cmd_*.cpp` file, e.g.:
 
 ```cpp
 dpp::task<void> cmd_hello(dpp::cluster& bot, const dpp::slashcommand_t& event) {
@@ -84,15 +99,15 @@ dpp::task<void> cmd_hello(dpp::cluster& bot, const dpp::slashcommand_t& event) {
 }
 ```
 
-2. Zarejestruj go w funkcji `add_*_commands`:
+2. Register it in the matching `add_*_commands` function:
 
 ```cpp
 definitions.emplace_back(dpp::slashcommand("hello", "Say hello.", bot.me.id));
 handlers["hello"] = make_handler(cmd_hello);
 ```
 
-Gotowe — komenda pojawi się po restarcie bota (przy `GUILD_ID` natychmiast).
+That's it — the command appears after a restart (instantly when `GUILD_ID` is set).
 
-## 📄 Licencja
+## 📄 License
 
-MIT — używaj, modyfikuj i rozwijaj dowolnie.
+MIT — use, modify and extend it freely.
