@@ -1,3 +1,11 @@
 .env
+
+
 build/
+
+main
 *.exe
+*.o
+*.obj
+
+.vscode/
