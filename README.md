@@ -9,7 +9,9 @@ with colorful embeds, coroutines and moderation logging.
 | Category | Commands |
 |---|---|
 | 🛡️ **Moderation** | `/kick`, `/ban`, `/unban`, `/timeout`, `/purge`, `/warn`, `/warnings`, `/clearwarns` |
-| ℹ️ **Information** | `/ping`, `/help`, `/botinfo`, `/serverinfo`, `/userinfo`, `/avatar`, `/servericon`, `/roleinfo`, `/invite` |
+| ℹ️ **Information** | `/ping`, `/help`, `/botinfo`, `/serverinfo`, `/userinfo`, `/avatar`, `/servericon`, `/roleinfo`, `/invite`, `/sync` |
+| ⚙️ **Server settings** | `/settings show`, `/settings logchannel`, `/settings welcome`, `/settings welcomemessage`, `/settings leveling`, `/settings levelupchannel`, `/settings levelupmessage`, `/settings rewardadd`, `/settings rewardremove` |
+| 📈 **Levels** | `/rank`, `/top` |
 | 🎉 **Fun** | `/8ball`, `/coinflip`, `/dice`, `/say`, `/embed` |
 
 Highlights:
@@ -21,6 +23,10 @@ Highlights:
 - **Moderation logs** — every kick/ban/timeout/purge/warn is posted to the channel
   from `LOG_CHANNEL_ID`.
 - **Welcome messages** — optional, posted to `WELCOME_CHANNEL_ID` when someone joins.
+- **Per-server settings** — every server configures its own moderation log channel,
+  welcome message, leveling on/off, level-up channel and role rewards via `/settings`.
+- **Leveling system** — chat to earn XP (one gain per user per minute), level up with
+  progress bars (`/rank`) and a leaderboard (`/top`), plus automatic role rewards.
 - **C++20 coroutines** — clean, sequential async code instead of nested callbacks.
 - **Consistent embed style** — footer with the bot's name and avatar, timestamps,
   semantic colors.
@@ -54,8 +60,14 @@ cmake --build build -j
 |---|---|
 | `BOT_TOKEN` | Bot token from https://discord.com/developers/applications **(required)** |
 | `GUILD_ID` | Server ID — commands register instantly on that server only. Leave empty for global registration (up to 1 h propagation) |
-| `LOG_CHANNEL_ID` | Channel for moderation logs (optional) |
-| `WELCOME_CHANNEL_ID` | Channel for welcome messages (optional) |
+| `BOT_OWNER_ID` | Your Discord user ID — when set, only you can use `/sync` (otherwise it requires Manage Server) |
+
+> 💾 **Data files** (created automatically in `data/`):
+> - `warnings.json` — warnings per server + user
+> - `settings.json` — per-server configuration from `/settings`
+> - `levels.json` — XP per server + user
+| `LOG_CHANNEL_ID` | **Default** channel for moderation logs (optional) — overridable per server with `/settings logchannel` |
+| `WELCOME_CHANNEL_ID` | **Default** channel for welcome messages (optional) — overridable per server with `/settings welcome` |
 
 > ⚠️ **Privileged Intents** — in the developer portal (Bot → Privileged Gateway Intents)
 > enable **Presence Intent**, **Server Members Intent** and **Message Content Intent**.
@@ -69,6 +81,10 @@ cmake --build build -j
   every server where the bot is present.
 - Warnings, `/warn`, `/warnings` and `/clearwarns` are fully **per-server**:
   the same user has independent warning counts on each server.
+- All `/settings` values (log channel, welcome message, leveling, role rewards)
+  are **per-server** and persisted in `data/settings.json`.
+- XP/levels (`data/levels.json`) are **per-server too** — the same user levels up
+  independently on every server.
 
 ## 🗂️ Project structure
 
@@ -80,9 +96,13 @@ cmake --build build -j
     ├── config.h/.cpp      # .env loading
     ├── bot_utils.h/.cpp   # embeds, permission checks, formatting, logs
     ├── warnings.h/.cpp    # persistent warning system (JSON)
+    ├── settings.h/.cpp    # per-server settings (JSON)
+    ├── levels.h/.cpp      # XP/leveling system (JSON)
     ├── commands.h/.cpp    # command registry + dispatch
     ├── cmd_moderation.cpp # kick, ban, unban, timeout, purge, warn…
     ├── cmd_utility.cpp    # ping, help, botinfo, serverinfo, userinfo…
+    ├── cmd_settings.cpp   # /settings per-server configuration
+    ├── cmd_levels.cpp     # /rank, /top
     └── cmd_fun.cpp        # 8ball, coinflip, dice, say, embed
 ```
 

@@ -55,6 +55,14 @@ void add_fun_commands(const dpp::cluster& bot,
                       std::vector<dpp::slashcommand>& definitions,
                       std::unordered_map<std::string, handler_t>& handlers);
 
+void add_settings_commands(const dpp::cluster& bot,
+                           std::vector<dpp::slashcommand>& definitions,
+                           std::unordered_map<std::string, handler_t>& handlers);
+
+void add_level_commands(const dpp::cluster& bot,
+                        std::vector<dpp::slashcommand>& definitions,
+                        std::unordered_map<std::string, handler_t>& handlers);
+
 /** @brief All slash command definitions ready for Discord registration. */
 std::vector<dpp::slashcommand> build_definitions(const dpp::cluster& bot);
 

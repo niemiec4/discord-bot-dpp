@@ -39,6 +39,10 @@ add_executable(discord_bot
     src/cmd_moderation.cpp
     src/cmd_utility.cpp
     src/cmd_fun.cpp
+    src/settings.cpp
+    src/levels.cpp
+    src/cmd_settings.cpp
+    src/cmd_levels.cpp
 )
 
 target_link_libraries(discord_bot PRIVATE dpp::dpp)

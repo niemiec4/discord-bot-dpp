@@ -1,6 +1,7 @@
 #include "bot_utils.h"
 
 #include "config.h"
+#include "settings.h"
 
 #include <algorithm>
 #include <cctype>
@@ -164,8 +165,11 @@ bool hierarchy_allows(const dpp::guild& guild, const dpp::guild_member& actor,
 }
 
 void send_log(dpp::cluster& bot, dpp::snowflake guild_id, const dpp::embed& embed) {
-    (void)guild_id; // logs go to the globally configured channel
-    dpp::snowflake log_channel{cfg::get_id("LOG_CHANNEL_ID")};
+    // Per-server setting wins; falls back to the global LOG_CHANNEL_ID env var.
+    dpp::snowflake log_channel = settings::get(guild_id).log_channel_id;
+    if (!log_channel) {
+        log_channel = dpp::snowflake{cfg::get_id("LOG_CHANNEL_ID")};
+    }
     if (!log_channel) {
         return;
     }

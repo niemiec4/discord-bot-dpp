@@ -1,5 +1,7 @@
 #include "commands.h"
 
+#include "config.h"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -298,6 +300,55 @@ dpp::task<void> cmd_invite(dpp::cluster& bot, const dpp::slashcommand_t& event) 
     co_return;
 }
 
+dpp::task<void> cmd_sync(dpp::cluster& bot, const dpp::slashcommand_t& event) {
+    // Owner-only when BOT_OWNER_ID is set, otherwise requires Manage Server.
+    uint64_t owner_id = cfg::get_id("BOT_OWNER_ID");
+    if (owner_id) {
+        if (static_cast<uint64_t>(event.command.usr.id) != owner_id) {
+            co_await event.co_reply(util::error("Only the bot owner can re-register commands."));
+            co_return;
+        }
+    } else if (!util::require_permission(event, dpp::p_manage_guild, "Manage Server")) {
+        co_return;
+    }
+
+    dpp::snowflake guild_id = event.command.guild_id;
+    if (!guild_id) {
+        co_await event.co_reply(util::error("This command can only be used inside a server."));
+        co_return;
+    }
+
+    std::vector<dpp::slashcommand> commands = cmd::build_definitions(bot);
+    co_await event.co_thinking(true);
+
+    dpp::snowflake target_guild{cfg::get_id("GUILD_ID")};
+    dpp::confirmation_callback_t res;
+    std::string scope;
+    if (target_guild) {
+        // Sync only the configured test guild (instant updates).
+        res = co_await bot.co_guild_bulk_command_create(commands, target_guild);
+        scope = "guild " + std::to_string(static_cast<uint64_t>(target_guild));
+    } else {
+        // Sync globally (replaces the whole global list, removing stale commands).
+        res = co_await bot.co_global_bulk_command_create(commands);
+        scope = "global";
+    }
+
+    if (res.is_error()) {
+        co_await event.co_edit_original_response(util::error("Failed to register commands (" + scope + "): " +
+                                                             res.get_error().human_readable));
+        co_return;
+    }
+
+    dpp::embed e = util::base_embed(bot, "🔄 Commands Synced", util::COLOR_SUCCESS)
+        .set_description("Registered **" + std::to_string(commands.size()) + "** commands (" + scope + ").")
+        .add_field("Note", target_guild ? "Guild commands update instantly."
+                                        : "Global commands can take up to an hour to propagate to all servers.", true);
+
+    co_await event.co_edit_original_response(dpp::message(e));
+    co_return;
+}
+
 dpp::task<void> cmd_roleinfo(dpp::cluster& bot, const dpp::slashcommand_t& event) {
     dpp::command_value raw = event.get_parameter("role");
     if (!std::holds_alternative<dpp::snowflake>(raw)) {
@@ -379,6 +430,9 @@ void add_utility_commands(const dpp::cluster& bot,
 
     definitions.emplace_back(dpp::slashcommand("servericon", "Show this server's icon.", bot.me.id));
     handlers["servericon"] = make_handler(cmd_servericon);
+
+    definitions.emplace_back(dpp::slashcommand("sync", "Re-register the slash commands (owner or Manage Server).", bot.me.id));
+    handlers["sync"] = make_handler(cmd_sync);
 
     definitions.emplace_back(dpp::slashcommand("invite", "Get an invite link to add the bot to other servers.", bot.me.id));
     handlers["invite"] = make_handler(cmd_invite);

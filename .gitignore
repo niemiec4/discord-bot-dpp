@@ -6,6 +6,8 @@ build/
 
 data/
 
+bot.log
+
 main
 *.exe
 *.o
