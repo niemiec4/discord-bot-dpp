@@ -1,7 +1,10 @@
 .env
 
+.env.local
 
 build/
+
+data/
 
 main
 *.exe
