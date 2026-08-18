@@ -8,7 +8,7 @@ namespace cmd {
 
 namespace {
 
-dpp::task<void> cmd_cc_add(dpp::cluster& bot, const dpp::slashcommand_t& event) {
+dpp::task<void> cmd_cc_add(dpp::cluster& /*bot*/, const dpp::slashcommand_t& event) {
     if (!util::require_permission(event, dpp::p_manage_guild, "Manage Server")) co_return;
 
     std::string name = util::get_string(event, "name");
@@ -40,7 +40,7 @@ dpp::task<void> cmd_cc_add(dpp::cluster& bot, const dpp::slashcommand_t& event) 
     co_return;
 }
 
-dpp::task<void> cmd_cc_remove(dpp::cluster& bot, const dpp::slashcommand_t& event) {
+dpp::task<void> cmd_cc_remove(dpp::cluster& /*bot*/, const dpp::slashcommand_t& event) {
     if (!util::require_permission(event, dpp::p_manage_guild, "Manage Server")) co_return;
 
     std::string name = util::get_string(event, "name");

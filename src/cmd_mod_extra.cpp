@@ -8,7 +8,7 @@ namespace cmd {
 
 namespace {
 
-dpp::task<void> cmd_snipe(dpp::cluster& bot, const dpp::slashcommand_t& event) {
+dpp::task<void> cmd_snipe(dpp::cluster& /*bot*/, const dpp::slashcommand_t& event) {
     if (!event.command.guild_id) {
         co_await event.co_reply(util::error("This command can only be used inside a server."));
         co_return;
@@ -153,6 +153,7 @@ void add_mod_extra_commands(const dpp::cluster& bot,
                             std::vector<dpp::slashcommand>& definitions,
                             std::unordered_map<std::string, handler_t>& handlers) {
     definitions.emplace_back(dpp::slashcommand("snipe", "Show the last deleted message in this channel.", bot.me.id));
+    handlers["snipe"] = make_handler(cmd_snipe);
 
     auto& lock = definitions.emplace_back(dpp::slashcommand("lock", "Lock a channel (deny sending messages).", bot.me.id));
     lock.add_option(dpp::command_option(dpp::co_channel, "channel", "Channel to lock (defaults to current)", false));

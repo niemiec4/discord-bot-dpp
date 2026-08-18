@@ -156,22 +156,10 @@ int main() {
         if (welcome_channel) {
             const dpp::guild* guild = dpp::find_guild(guild_id);
             std::string guild_name = guild ? guild->name : "the server";
-            std::string mention = "<@" + std::to_string(static_cast<uint64_t>(event.added.user_id)) + ">";
+            uint64_t member_count = guild ? guild->member_count : 0;
 
-            std::string text = s.welcome_message;
-            if (text.empty()) {
-                text = "Hey {user}, welcome to **{server}**!\nType `/help` to see everything I can do.";
-            }
-            text = replace_all(text, "{user}", mention);
-            text = replace_all(text, "{server}", util::escape(guild_name));
-
-            dpp::embed e = dpp::embed()
-                .set_color(util::COLOR_SUCCESS)
-                .set_title("Welcome")
-                .set_description(text)
-                .set_thumbnail(event.added.get_avatar_url(256))
-                .set_timestamp(time(nullptr));
-
+            dpp::embed e = util::welcome_embed(bot, guild_name, event.added,
+                                               s.welcome_message, member_count);
             bot.message_create(dpp::message(welcome_channel, e));
         }
 
@@ -269,10 +257,31 @@ int main() {
                     util::COLOR_WARNING, "Message ID", std::to_string(static_cast<uint64_t>(event.id)));
     });
 
-    // XP/leveling + snipe tracking: every chat message.
+    // XP/leveling + snipe tracking + mention replies: every chat message.
     bot.on_message_create([&bot](const dpp::message_create_t& event) {
         levels::handle_message(bot, event.msg);
         snipes::track(event.msg);
+
+        // When the bot is mentioned and the message is ONLY the mention
+        // (not a mention inside a sentence), reply with the bot's info card.
+        if (bot.me.id && !event.msg.author.is_bot() && event.msg.guild_id) {
+            std::string content = event.msg.content;
+            // Trim surrounding whitespace.
+            auto first = content.find_first_not_of(" \t\r\n");
+            if (first != std::string::npos) {
+                content = content.substr(first);
+                auto last = content.find_last_not_of(" \t\r\n");
+                content = content.substr(0, last + 1);
+            }
+
+            std::string bot_id = std::to_string(static_cast<uint64_t>(bot.me.id));
+            if (content == "<@" + bot_id + ">" || content == "<@!" + bot_id + ">") {
+                dpp::message reply(util::bot_info_embed(bot));
+                reply.channel_id = event.msg.channel_id;
+                reply.set_reference(event.msg.id);
+                bot.message_create(reply);
+            }
+        }
     });
 
     // Giveaway sweeper: end giveaways whose time is up (every 10 seconds).

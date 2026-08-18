@@ -77,6 +77,30 @@ bool hierarchy_allows(const dpp::guild& guild, const dpp::guild_member& actor,
 /** @brief Send an embed to the configured moderation log channel (no-op if unset). */
 void send_log(dpp::cluster& bot, dpp::snowflake guild_id, const dpp::embed& embed);
 
+/**
+ * @brief Build a polished welcome embed for a new member.
+ * Used both for real joins and for the `/settings welcomepreview` command,
+ * so previews always match the real message.
+ *
+ * @param bot          cluster (for the bot avatar in the footer)
+ * @param guild_name   server name
+ * @param member       the new member
+ * @param text         welcome text ({user}, {server} already replaced)
+ * @param member_count current member count (shown as "Member #N")
+ */
+dpp::embed welcome_embed(const dpp::cluster& bot, const std::string& guild_name,
+                         const dpp::guild_member& member, const std::string& text,
+                         uint64_t member_count);
+
+/** @brief Average gateway latency of all shards (ms). */
+double gateway_ping(dpp::cluster& bot);
+
+/**
+ * @brief The "about me" embed (uptime, servers, latency, version).
+ * Used by `/botinfo` and when the bot is mentioned.
+ */
+dpp::embed bot_info_embed(dpp::cluster& bot);
+
 /** @brief Escape Discord markdown in user-provided text. */
 std::string escape(const std::string& text);
 

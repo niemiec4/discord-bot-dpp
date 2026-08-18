@@ -115,7 +115,7 @@ dpp::task<void> open_ticket(dpp::cluster& bot, const dpp::button_click_t& event)
 
 // ── Giveaways ────────────────────────────────────────────────────────────
 
-dpp::task<void> join_giveaway(dpp::cluster& bot, const dpp::button_click_t& event, int64_t id) {
+dpp::task<void> join_giveaway(dpp::cluster& /*bot*/, const dpp::button_click_t& event, int64_t id) {
     if (!giveaways::is_active(id)) {
         dpp::message msg(util::warning("This giveaway has already ended."));
         msg.set_flags(dpp::m_ephemeral);

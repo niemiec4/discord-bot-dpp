@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <ctime>
 #include <sstream>
 
@@ -164,6 +165,50 @@ bool hierarchy_allows(const dpp::guild& guild, const dpp::guild_member& actor,
     return highest_role_position(guild, actor) > highest_role_position(guild, target);
 }
 
+dpp::embed welcome_embed(const dpp::cluster& bot, const std::string& guild_name,
+                         const dpp::guild_member& member, const std::string& text,
+                         uint64_t member_count) {
+    // Discord epoch: snowflake creation time.
+    constexpr uint64_t DISCORD_EPOCH_MS = 1420070400000ULL;
+    time_t account_created = static_cast<time_t>(
+        (static_cast<uint64_t>(member.user_id) >> 22) / 1000 + DISCORD_EPOCH_MS / 1000);
+
+    std::string description = text.empty()
+        ? "Welcome, {user}! I am the server assistant. Use `/help` to see what I can do — "
+          "levels, giveaways, tickets, polls and more."
+        : text;
+
+    // Placeholders: {user} -> mention, {server} -> server name.
+    auto replace_all = [](std::string t, const std::string& from, const std::string& to) {
+        size_t pos = 0;
+        while ((pos = t.find(from, pos)) != std::string::npos) {
+            t.replace(pos, from.size(), to);
+            pos += to.size();
+        }
+        return t;
+    };
+    description = replace_all(description, "{user}",
+                              "<@" + std::to_string(static_cast<uint64_t>(member.user_id)) + ">");
+    description = replace_all(description, "{server}", escape(guild_name));
+
+    dpp::embed e = dpp::embed()
+        .set_color(COLOR_PRIMARY)
+        .set_title("Welcome to " + escape(guild_name))
+        .set_description(description)
+        .set_thumbnail(member.get_avatar_url(256))
+        .add_field("Member", "<@" + std::to_string(static_cast<uint64_t>(member.user_id)) +
+                             "> · #" + std::to_string(member_count), true)
+        .add_field("Account created", rel_time(account_created), true)
+        .set_timestamp(time(nullptr));
+
+    if (bot.me.id) {
+        e.set_footer(dpp::embed_footer()
+            .set_text(guild_name)
+            .set_icon(bot.me.get_avatar_url(256)));
+    }
+    return e;
+}
+
 void send_log(dpp::cluster& bot, dpp::snowflake guild_id, const dpp::embed& embed) {
     // Per-server setting wins; falls back to the global LOG_CHANNEL_ID env var.
     dpp::snowflake log_channel = settings::get(guild_id).log_channel_id;
@@ -174,6 +219,39 @@ void send_log(dpp::cluster& bot, dpp::snowflake guild_id, const dpp::embed& embe
         return;
     }
     bot.message_create(dpp::message(log_channel, embed));
+}
+
+double gateway_ping(dpp::cluster& bot) {
+    const auto& shards = bot.get_shards();
+    if (shards.empty()) {
+        return 0.0;
+    }
+    double total = 0.0;
+    for (const auto& [id, client] : shards) {
+        total += client->websocket_ping;
+    }
+    return total / static_cast<double>(shards.size());
+}
+
+dpp::embed bot_info_embed(dpp::cluster& bot) {
+    constexpr uint64_t DISCORD_EPOCH_MS = 1420070400000ULL;
+    time_t created = static_cast<time_t>(
+        (static_cast<uint64_t>(bot.me.id) >> 22) / 1000 + DISCORD_EPOCH_MS / 1000);
+
+    return base_embed(bot, bot.me.username, COLOR_PRIMARY,
+                      "I am a multi-purpose Discord bot built with the **D++** library. "
+                      "I keep your server tidy with moderation tools, reward activity with "
+                      "levels and coins, and engage members with tickets, giveaways, polls "
+                      "and role menus — all configured per server.")
+        .set_thumbnail(bot.me.get_avatar_url(512))
+        .add_field("Uptime", bot.uptime().to_string(), true)
+        .add_field("Servers", std::to_string(dpp::get_guild_count()), true)
+        .add_field("Users seen", std::to_string(dpp::get_user_count()), true)
+        .add_field("Shards", std::to_string(bot.get_shards().size()), true)
+        .add_field("Gateway ping", std::to_string(static_cast<int64_t>(std::round(gateway_ping(bot)))) + " ms", true)
+        .add_field("Library", DPP_VERSION_TEXT, true)
+        .add_field("Bot ID", std::to_string(static_cast<uint64_t>(bot.me.id)), true)
+        .add_field("Created", rel_time(created), true);
 }
 
 std::string escape(const std::string& text) {

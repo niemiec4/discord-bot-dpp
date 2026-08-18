@@ -125,6 +125,38 @@ dpp::task<void> sub_welcomemessage(const dpp::slashcommand_t& event, dpp::snowfl
     co_return;
 }
 
+dpp::task<void> sub_welcomepreview(dpp::cluster& bot, const dpp::slashcommand_t& event, dpp::snowflake guild_id) {
+    settings::guild_settings s = settings::get(guild_id);
+
+    // Optional custom text; defaults to the configured welcome message.
+    std::string text = util::get_string(event, "text");
+    if (text.empty()) {
+        text = s.welcome_message;
+    }
+    if (text.size() > 1024) {
+        co_await event.co_reply(util::error("Message is too long (max 1024 characters)."));
+        co_return;
+    }
+
+    const dpp::guild* guild = dpp::find_guild(guild_id);
+    if (!guild) {
+        co_await event.co_reply(util::error("Server not found in cache."));
+        co_return;
+    }
+
+    dpp::guild_member member = dpp::find_guild_member(guild_id, event.command.usr.id);
+    if (!member.user_id) {
+        co_await event.co_reply(util::error("Could not find your membership in the cache."));
+        co_return;
+    }
+
+    dpp::embed e = util::welcome_embed(bot, guild->name, member, text, guild->member_count);
+    dpp::message msg(e);
+    msg.set_flags(dpp::m_ephemeral);
+    co_await event.co_reply(msg);
+    co_return;
+}
+
 dpp::task<void> sub_leveling(const dpp::slashcommand_t& event, dpp::snowflake guild_id) {
     settings::guild_settings s = settings::get(guild_id);
     bool enable = util::get_boolean(event, "enabled");
@@ -420,6 +452,10 @@ void add_settings_commands(const dpp::cluster& bot,
     leveling.add_option(dpp::command_option(dpp::co_boolean, "enabled", "True to enable, false to disable", true));
     settings_cmd.add_option(leveling);
 
+    dpp::command_option welcomepreview(dpp::co_sub_command, "welcomepreview", "Preview the welcome message.");
+    welcomepreview.add_option(dpp::command_option(dpp::co_string, "text", "Optional text to preview (defaults to the configured one)", false));
+    settings_cmd.add_option(welcomepreview);
+
     dpp::command_option levelupchannel(dpp::co_sub_command, "levelupchannel", "Set the channel for level-up messages.");
     levelupchannel.add_option(dpp::command_option(dpp::co_channel, "channel", "Channel for level-up messages", false));
     levelupchannel.add_option(dpp::command_option(dpp::co_boolean, "here", "Show level-ups in the current channel", false));
@@ -502,6 +538,7 @@ void add_settings_commands(const dpp::cluster& bot,
         else if (sub == "welcome")    co_await sub_welcome(event, guild_id);
         else if (sub == "welcomemessage") co_await sub_welcomemessage(event, guild_id);
         else if (sub == "leveling")   co_await sub_leveling(event, guild_id);
+        else if (sub == "welcomepreview") co_await sub_welcomepreview(bot, event, guild_id);
         else if (sub == "levelupchannel") co_await sub_levelupchannel(event, guild_id);
         else if (sub == "levelupmessage") co_await sub_levelupmessage(event, guild_id);
         else if (sub == "rewardadd")  co_await sub_reward_add(bot, event, guild_id);

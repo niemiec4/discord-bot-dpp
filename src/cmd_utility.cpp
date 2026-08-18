@@ -27,18 +27,6 @@ std::string rgb_hex(uint32_t rgb) {
     return buf;
 }
 
-double gateway_ping(const dpp::cluster& bot) {
-    const auto& shards = bot.get_shards();
-    if (shards.empty()) {
-        return 0.0;
-    }
-    double total = 0.0;
-    for (const auto& [id, client] : shards) {
-        total += client->websocket_ping;
-    }
-    return total / static_cast<double>(shards.size());
-}
-
 dpp::component link_button(const std::string& url, const std::string& label) {
     return dpp::component()
         .set_label(label)
@@ -47,7 +35,7 @@ dpp::component link_button(const std::string& url, const std::string& label) {
 }
 
 dpp::task<void> cmd_ping(dpp::cluster& bot, const dpp::slashcommand_t& event) {
-    double gateway_ms = gateway_ping(bot);
+    double gateway_ms = util::gateway_ping(bot);
 
     auto start = std::chrono::steady_clock::now();
     dpp::confirmation_callback_t res = co_await bot.co_current_user_get();
@@ -76,6 +64,7 @@ dpp::task<void> cmd_help(dpp::cluster& bot, const dpp::slashcommand_t& event) {
                 "`roleinfo`, `invite`, `sync`");
     e.add_field("Server settings",
                 "`settings show`, `settings logchannel`, `settings welcome`, `settings welcomemessage`, "
+                "`settings welcomepreview`, "
                 "`settings leveling`, `settings levelupchannel`, `settings levelupmessage`, "
                 "`settings rewardadd`, `settings rewardremove`, `settings warnthreshold`, "
                 "`settings warnaction`, `settings warntimeout`, `settings xpmult`, "
@@ -103,21 +92,7 @@ dpp::task<void> cmd_botinfo(dpp::cluster& bot, const dpp::slashcommand_t& event)
         co_return;
     }
 
-    dpp::embed e = util::base_embed(bot, bot.me.username, util::COLOR_PRIMARY,
-                                    "I am a multi-purpose Discord bot built with the **D++** library. "
-                                    "I keep your server tidy with moderation tools, reward activity with "
-                                    "levels and coins, and engage members with tickets, giveaways, polls "
-                                    "and role menus — all configured per server.")
-        .set_thumbnail(bot.me.get_avatar_url(512))
-        .add_field("Uptime", bot.uptime().to_string(), true)
-        .add_field("Servers", std::to_string(dpp::get_guild_count()), true)
-        .add_field("Users seen", std::to_string(dpp::get_user_count()), true)
-        .add_field("Shards", std::to_string(bot.get_shards().size()), true)
-        .add_field("Gateway ping", std::to_string(static_cast<int64_t>(std::round(gateway_ping(bot)))) + " ms", true)
-        .add_field("Library", DPP_VERSION_TEXT, true)
-        .add_field("Bot ID", std::to_string(static_cast<uint64_t>(bot.me.id)), true)
-        .add_field("Created", util::rel_time(snowflake_time(bot.me.id)), true);
-
+    dpp::embed e = util::bot_info_embed(bot);
     co_await event.co_reply(dpp::message(e));
     co_return;
 }
@@ -295,22 +270,27 @@ dpp::task<void> cmd_invite(dpp::cluster& bot, const dpp::slashcommand_t& event) 
         co_return;
     }
 
-    // Permissions the bot needs: general chat usage + moderation.
+    // Permissions the bot needs: general chat usage + moderation + tickets.
     const uint64_t perms = dpp::p_view_channel | dpp::p_send_messages | dpp::p_manage_messages |
                            dpp::p_embed_links | dpp::p_attach_files | dpp::p_read_message_history |
                            dpp::p_add_reactions | dpp::p_use_external_emojis | dpp::p_kick_members |
                            dpp::p_ban_members | dpp::p_manage_channels | dpp::p_manage_roles |
-                           dpp::p_moderate_members;
+                           dpp::p_moderate_members | dpp::p_manage_threads | dpp::p_create_public_threads;
 
-    std::string url = "https://discord.com/api/oauth2/authorize?client_id=" +
+    // Canonical OAuth2 URL. Keep the button AND show the plain link so it
+    // can always be copied, even if a client misbehaves with link buttons.
+    std::string url = "https://discord.com/oauth2/authorize?client_id=" +
                       std::to_string(static_cast<uint64_t>(bot.me.id)) +
                       "&permissions=" + std::to_string(perms) +
                       "&scope=bot%20applications.commands";
 
     dpp::embed e = util::base_embed(bot, "Add Me to Your Server", util::COLOR_PRIMARY,
-        "Click the button below to invite me to any server where you have **Manage Server** permission.\n\n"
-        "The link already includes the `bot` and `applications.commands` scopes plus all the "
-        "permissions needed for moderation — it works out of the box.");
+        "Use the button below to add me to any server where you have **Manage Server** permission.\n\n"
+        "The link includes the `bot` and `applications.commands` scopes and every permission I "
+        "need for moderation, tickets and channels — no extra setup required.\n\n"
+        "If the button does not respond, copy this link:\n" + url + "\n\n"
+        "New servers see my commands within about an hour after the invite (global registration). "
+        "If they are missing, run `/sync` on the server you already use.");
 
     dpp::message msg(e);
     msg.add_component(link_button(url, "Invite bot"));
