@@ -63,7 +63,7 @@ dpp::task<void> cmd_8ball(dpp::cluster& bot, const dpp::slashcommand_t& event) {
         "Very doubtful."
     };
 
-    dpp::embed e = util::base_embed(bot, "🎱 Magic 8-Ball", util::COLOR_PRIMARY)
+    dpp::embed e = util::base_embed(bot, "Magic 8-Ball", util::COLOR_PRIMARY)
         .add_field("Question", util::escape(question))
         .add_field("Answer", answers[random_int(0, static_cast<int>(answers.size()) - 1)]);
 
@@ -73,8 +73,8 @@ dpp::task<void> cmd_8ball(dpp::cluster& bot, const dpp::slashcommand_t& event) {
 
 dpp::task<void> cmd_coinflip(dpp::cluster& bot, const dpp::slashcommand_t& event) {
     bool heads = random_int(0, 1) == 0;
-    dpp::embed e = util::base_embed(bot, "🪙 Coin Flip", util::COLOR_PRIMARY)
-        .set_description(heads ? "**Heads!** 🟡" : "**Tails!** 🪙");
+    dpp::embed e = util::base_embed(bot, "Coin Flip", util::COLOR_PRIMARY)
+        .set_description(heads ? "**Heads!**" : "**Tails!**");
 
     co_await event.co_reply(dpp::message(e));
     co_return;
@@ -86,7 +86,7 @@ dpp::task<void> cmd_dice(dpp::cluster& bot, const dpp::slashcommand_t& event) {
 
     int result = random_int(1, static_cast<int>(sides));
 
-    dpp::embed e = util::base_embed(bot, "🎲 Dice Roll", util::COLOR_PRIMARY)
+    dpp::embed e = util::base_embed(bot, "Dice Roll", util::COLOR_PRIMARY)
         .set_description("You rolled a d" + std::to_string(sides) + " and got **" +
                          std::to_string(result) + "**!");
 
@@ -105,7 +105,7 @@ dpp::task<void> cmd_say(dpp::cluster& bot, const dpp::slashcommand_t& event) {
         co_return;
     }
 
-    dpp::embed e = util::base_embed(bot, "💬 " + event.command.usr.format_username(), util::COLOR_PRIMARY)
+    dpp::embed e = util::base_embed(bot, event.command.usr.format_username(), util::COLOR_PRIMARY)
         .set_description(util::escape(text))
         .set_thumbnail(event.command.usr.get_avatar_url(256));
 

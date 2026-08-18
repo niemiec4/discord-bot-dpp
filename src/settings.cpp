@@ -1,34 +1,14 @@
 #include "settings.h"
 
+#include "db.h"
+
 #include <dpp/json.h>
 
-#include <fstream>
 #include <iostream>
-#include <sys/stat.h>
 
 namespace settings {
 
 namespace {
-const std::string DATA_DIR = "data";
-const std::string FILE_PATH = DATA_DIR + "/settings.json";
-
-// recursive so that save() can be called from within functions that
-// already hold the lock (set -> save).
-std::recursive_mutex mtx;
-nlohmann::json db = nlohmann::json::object();
-bool loaded = false;
-
-void ensure_dir() {
-#ifdef _WIN32
-    _mkdir(DATA_DIR.c_str());
-#else
-    mkdir(DATA_DIR.c_str(), 0755);
-#endif
-}
-
-std::string key(dpp::snowflake guild_id) {
-    return std::to_string(static_cast<uint64_t>(guild_id));
-}
 
 guild_settings parse_guild(const nlohmann::json& j) {
     guild_settings s;
@@ -65,6 +45,9 @@ guild_settings parse_guild(const nlohmann::json& j) {
             }
         }
     }
+
+    s.autorole_id         = dpp::snowflake{j.value("autorole_id", uint64_t(0))};
+    s.audit_channel_id    = dpp::snowflake{j.value("audit_channel_id", uint64_t(0))};
     return s;
 }
 
@@ -89,54 +72,42 @@ nlohmann::json dump_guild(const guild_settings& s) {
         {"warn_action",          s.warn_action},
         {"warn_timeout_minutes", s.warn_timeout_minutes},
         {"booster_multiplier",   s.booster_multiplier},
-        {"role_multipliers",     multipliers}
+        {"role_multipliers",     multipliers},
+        {"autorole_id",          static_cast<uint64_t>(s.autorole_id)},
+        {"audit_channel_id",     static_cast<uint64_t>(s.audit_channel_id)}
     };
 }
 } // namespace
 
 void load() {
-    std::lock_guard<std::recursive_mutex> lock(mtx);
-    if (loaded) {
-        return;
-    }
-    loaded = true;
-
-    std::ifstream file(FILE_PATH);
-    if (!file.is_open()) {
-        return;
-    }
-    try {
-        file >> db;
-    } catch (const std::exception& e) {
-        std::cerr << "[settings] Failed to parse " << FILE_PATH << ": " << e.what() << "\n";
-        db = nlohmann::json::object();
-    }
+    // Data now lives in SQLite (initialised by db::init in main).
 }
 
 void save() {
-    std::lock_guard<std::recursive_mutex> lock(mtx);
-    ensure_dir();
-    std::ofstream file(FILE_PATH, std::ios::trunc);
-    if (!file.is_open()) {
-        std::cerr << "[settings] Could not open " << FILE_PATH << " for writing.\n";
-        return;
-    }
-    file << db.dump(4);
+    // Data now lives in SQLite (initialised by db::init in main).
 }
 
 guild_settings get(dpp::snowflake guild_id) {
-    std::lock_guard<std::recursive_mutex> lock(mtx);
-    auto it = db.find(key(guild_id));
-    if (it == db.end() || !it->is_object()) {
+    db::stmt s("SELECT data FROM guild_settings WHERE guild_id = ?");
+    s.bind(1, static_cast<int64_t>(guild_id));
+    if (!s.step() || s.col_is_null(0)) {
         return guild_settings{};
     }
-    return parse_guild(*it);
+    try {
+        nlohmann::json j = nlohmann::json::parse(s.col_text(0));
+        return parse_guild(j);
+    } catch (const std::exception& e) {
+        std::cerr << "[settings] Failed to parse settings for guild " << static_cast<uint64_t>(guild_id)
+                  << ": " << e.what() << "\n";
+        return guild_settings{};
+    }
 }
 
 void set(dpp::snowflake guild_id, const guild_settings& s) {
-    std::lock_guard<std::recursive_mutex> lock(mtx);
-    db[key(guild_id)] = dump_guild(s);
-    save();
+    db::stmt upsert("INSERT OR REPLACE INTO guild_settings (guild_id, data) VALUES (?,?)");
+    upsert.bind(1, static_cast<int64_t>(guild_id));
+    upsert.bind(2, dump_guild(s).dump());
+    upsert.step();
 }
 
 } // namespace settings

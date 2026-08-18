@@ -34,7 +34,7 @@ dpp::embed base_embed(const dpp::cluster& bot, const std::string& title,
 dpp::message error(const std::string& text, bool ephemeral) {
     dpp::message msg(dpp::embed()
         .set_color(COLOR_ERROR)
-        .set_title("❌ Error")
+        .set_title("Error")
         .set_description(text)
         .set_timestamp(time(nullptr)));
     if (ephemeral) {
@@ -46,7 +46,7 @@ dpp::message error(const std::string& text, bool ephemeral) {
 dpp::message success(const std::string& text, bool ephemeral) {
     dpp::message msg(dpp::embed()
         .set_color(COLOR_SUCCESS)
-        .set_title("✅ Success")
+        .set_title("Success")
         .set_description(text)
         .set_timestamp(time(nullptr)));
     if (ephemeral) {
@@ -58,7 +58,7 @@ dpp::message success(const std::string& text, bool ephemeral) {
 dpp::message warning(const std::string& text, bool ephemeral) {
     dpp::message msg(dpp::embed()
         .set_color(COLOR_WARNING)
-        .set_title("⚠️ Warning")
+        .set_title("Warning")
         .set_description(text)
         .set_timestamp(time(nullptr)));
     if (ephemeral) {

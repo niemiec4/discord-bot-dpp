@@ -64,18 +64,16 @@ dpp::task<void> cmd_top(dpp::cluster& bot, const dpp::slashcommand_t& event) {
         co_return;
     }
 
-    const char* medals[] = {"🥇", "🥈", "🥉"};
     std::string list;
     for (size_t i = 0; i < entries.size(); ++i) {
         const auto& [user_id, info] = entries[i];
         const dpp::user* user = dpp::find_user(user_id);
         std::string name = user ? user->format_username() : "Unknown user";
-        std::string prefix = i < 3 ? std::string(medals[i]) + " " : "`#" + std::to_string(i + 1) + "` ";
-        list += prefix + "**" + util::escape(name) + "** — level " + std::to_string(info.level) +
-                " · " + std::to_string(info.xp) + " XP\n";
+        list += "`#" + std::to_string(i + 1) + "` **" + util::escape(name) + "** — level " +
+                std::to_string(info.level) + " · " + std::to_string(info.xp) + " XP\n";
     }
 
-    dpp::embed e = util::base_embed(bot, "🏆 Leaderboard", util::COLOR_PRIMARY,
+    dpp::embed e = util::base_embed(bot, "Leaderboard", util::COLOR_PRIMARY,
                                     "Top " + std::to_string(entries.size()) + " members on **" +
                                     util::escape(guild->name) + "**:\n\n" + list);
 

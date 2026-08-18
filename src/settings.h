@@ -31,12 +31,15 @@ struct guild_settings {
     // XP multipliers.
     std::map<dpp::snowflake, double> role_multipliers; // role id -> XP multiplier
     double booster_multiplier{1.0};          // XP multiplier for server boosters (1.0 = off)
+
+    dpp::snowflake autorole_id{0};          // role auto-assigned to new members (0 = off)
+    dpp::snowflake audit_channel_id{0};     // full audit log channel (0 = off)
 };
 
-/** @brief Load settings from disk (idempotent). */
+/** @brief No-op kept for compatibility (data now lives in SQLite). */
 void load();
 
-/** @brief Write the current settings to disk. */
+/** @brief No-op kept for compatibility (data now lives in SQLite). */
 void save();
 
 /** @brief Get a copy of a guild's settings (defaults when unset). */

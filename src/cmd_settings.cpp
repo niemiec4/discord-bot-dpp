@@ -8,7 +8,7 @@ namespace cmd {
 
 namespace {
 
-std::string fmt_yes_no(bool v) { return v ? "✅ Yes" : "❌ No"; }
+std::string fmt_yes_no(bool v) { return v ? "**Yes**" : "**No**"; }
 
 std::string fmt_channel(dpp::snowflake id) {
     return id ? "<#" + std::to_string(static_cast<uint64_t>(id)) + ">" : "*(not set)*";
@@ -44,7 +44,7 @@ dpp::task<void> sub_show(dpp::cluster& bot, const dpp::slashcommand_t& event, dp
           action_names[s.warn_action >= 0 && s.warn_action <= 3 ? s.warn_action : 0] + "**" +
           (s.warn_action == 1 ? " (" + std::to_string(s.warn_timeout_minutes) + " min)" : "");
 
-    dpp::embed e = util::base_embed(bot, "⚙️ Server Settings", util::COLOR_PRIMARY)
+    dpp::embed e = util::base_embed(bot, "Server Settings", util::COLOR_PRIMARY)
         .add_field("Moderation log channel", fmt_channel(s.log_channel_id), true)
         .add_field("Welcome channel", fmt_channel(s.welcome_channel_id), true)
         .add_field("Welcome message", s.welcome_message.empty() ? "*(default)*" : util::escape(s.welcome_message))
@@ -54,7 +54,9 @@ dpp::task<void> sub_show(dpp::cluster& bot, const dpp::slashcommand_t& event, dp
         .add_field("Role rewards", rewards)
         .add_field("Auto-punishment", auto_punish, true)
         .add_field("Booster XP bonus", s.booster_multiplier > 1.0 ? "**x" + std::to_string(s.booster_multiplier) + "**" : "*(off)*", true)
-        .add_field("Role XP multipliers", multipliers);
+        .add_field("Role XP multipliers", multipliers)
+        .add_field("Auto-role", s.autorole_id ? "<@&" + std::to_string(static_cast<uint64_t>(s.autorole_id)) + ">" : "*(off)*", true)
+        .add_field("Audit log channel", fmt_channel(s.audit_channel_id), true);
 
     co_await event.co_reply(dpp::message(e));
     co_return;
@@ -313,6 +315,63 @@ dpp::task<void> sub_xpmultremove(const dpp::slashcommand_t& event, dpp::snowflak
     co_return;
 }
 
+dpp::task<void> sub_autorole(const dpp::slashcommand_t& event, dpp::snowflake guild_id) {
+    settings::guild_settings s = settings::get(guild_id);
+
+    if (util::get_boolean(event, "clear")) {
+        s.autorole_id = 0;
+        settings::set(guild_id, s);
+        co_await event.co_reply(util::success("Auto-role disabled. New members will not get a role."));
+        co_return;
+    }
+
+    dpp::command_value raw_role = event.get_parameter("role");
+    if (!std::holds_alternative<dpp::snowflake>(raw_role)) {
+        co_await event.co_reply(util::error("You must pick a role (or use `clear`)."));
+        co_return;
+    }
+    dpp::snowflake role_id = std::get<dpp::snowflake>(raw_role);
+
+    const dpp::guild* guild = dpp::find_guild(guild_id);
+    if (guild == nullptr) {
+        co_await event.co_reply(util::error("Server not found in cache."));
+        co_return;
+    }
+    const dpp::role* role = dpp::find_role(role_id);
+    if (role == nullptr) {
+        co_await event.co_reply(util::error("Role not found in cache."));
+        co_return;
+    }
+
+    s.autorole_id = role_id;
+    settings::set(guild_id, s);
+    co_await event.co_reply(util::success("New members will now automatically receive <@&" +
+                                          std::to_string(static_cast<uint64_t>(role_id)) + ">."));
+    co_return;
+}
+
+dpp::task<void> sub_auditlog(const dpp::slashcommand_t& event, dpp::snowflake guild_id) {
+    settings::guild_settings s = settings::get(guild_id);
+
+    if (util::get_boolean(event, "clear")) {
+        s.audit_channel_id = 0;
+        settings::set(guild_id, s);
+        co_await event.co_reply(util::success("Audit log disabled."));
+        co_return;
+    }
+
+    dpp::command_value raw = event.get_parameter("channel");
+    if (!std::holds_alternative<dpp::snowflake>(raw)) {
+        co_await event.co_reply(util::error("You must pick a channel (or use `clear`)."));
+        co_return;
+    }
+    s.audit_channel_id = std::get<dpp::snowflake>(raw);
+    settings::set(guild_id, s);
+    co_await event.co_reply(util::success("Audit log will be sent to <#" +
+                                          std::to_string(static_cast<uint64_t>(s.audit_channel_id)) + ">."));
+    co_return;
+}
+
 dpp::task<void> sub_xpboost(const dpp::slashcommand_t& event, dpp::snowflake guild_id) {
     dpp::command_value raw_mult = event.get_parameter("multiplier");
     if (!std::holds_alternative<double>(raw_mult)) {
@@ -408,6 +467,16 @@ void add_settings_commands(const dpp::cluster& bot,
     xpboost.add_option(dpp::command_option(dpp::co_number, "multiplier", "Multiplier (1.0 = off, e.g. 1.5)", true).set_min_value(1.0).set_max_value(10.0));
     settings_cmd.add_option(xpboost);
 
+    dpp::command_option autorole(dpp::co_sub_command, "autorole", "Auto-assign a role to new members.");
+    autorole.add_option(dpp::command_option(dpp::co_role, "role", "Role to assign on join", false));
+    autorole.add_option(dpp::command_option(dpp::co_boolean, "clear", "Disable auto-role", false));
+    settings_cmd.add_option(autorole);
+
+    dpp::command_option auditlog(dpp::co_sub_command, "auditlog", "Set the full audit log channel.");
+    auditlog.add_option(dpp::command_option(dpp::co_channel, "channel", "Channel for audit events", false));
+    auditlog.add_option(dpp::command_option(dpp::co_boolean, "clear", "Disable the audit log", false));
+    settings_cmd.add_option(auditlog);
+
     definitions.emplace_back(settings_cmd);
     handlers["settings"] = make_handler([](dpp::cluster& bot, const dpp::slashcommand_t& event) -> dpp::task<void> {
         if (!util::require_permission(event, dpp::p_manage_guild, "Manage Server")) {
@@ -443,6 +512,8 @@ void add_settings_commands(const dpp::cluster& bot,
         else if (sub == "xpmult")     co_await sub_xpmult(event, guild_id);
         else if (sub == "xpmultremove") co_await sub_xpmultremove(event, guild_id);
         else if (sub == "xpboost")    co_await sub_xpboost(event, guild_id);
+        else if (sub == "autorole")   co_await sub_autorole(event, guild_id);
+        else if (sub == "auditlog")   co_await sub_auditlog(event, guild_id);
         else                           co_await sub_show(bot, event, guild_id);
 
         co_return;

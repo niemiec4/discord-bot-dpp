@@ -54,7 +54,7 @@ dpp::task<void> cmd_ping(dpp::cluster& bot, const dpp::slashcommand_t& event) {
     auto end = std::chrono::steady_clock::now();
     double rest_ms = std::chrono::duration<double, std::milli>(end - start).count();
 
-    dpp::embed e = util::base_embed(bot, "🏓 Pong!", util::COLOR_PRIMARY)
+    dpp::embed e = util::base_embed(bot, "Pong", util::COLOR_PRIMARY)
         .add_field("Gateway latency", std::to_string(static_cast<int64_t>(std::round(gateway_ms))) + " ms", true)
         .add_field("API latency", std::to_string(static_cast<int64_t>(std::round(rest_ms))) + " ms", true)
         .add_field("Shards", std::to_string(bot.get_shards().size()), true);
@@ -64,28 +64,34 @@ dpp::task<void> cmd_ping(dpp::cluster& bot, const dpp::slashcommand_t& event) {
 }
 
 dpp::task<void> cmd_help(dpp::cluster& bot, const dpp::slashcommand_t& event) {
-    dpp::embed e = util::base_embed(bot, "📖 Help", util::COLOR_PRIMARY,
-                                    "A modern Discord bot built with the **D++** library.\n"
-                                    "Everything is controlled with slash commands!");
+    dpp::embed e = util::base_embed(bot, "Help", util::COLOR_PRIMARY,
+                                    "Hello, I am a multi-purpose Discord bot. Everything I do is "
+                                    "controlled with slash commands — pick a category below.");
 
-    e.add_field("🛡️ Moderation",
-                "`kick`, `ban`, `unban`, `timeout`, `purge`, `warn`, `warnings`, `clearwarns`");
-    e.add_field("ℹ️ Information",
-                "`ping`, `help`, `botinfo`, `serverinfo`, `userinfo`, `avatar`, `servericon`, `roleinfo`, `invite`, `sync`");
-    e.add_field("⚙️ Server settings",
+    e.add_field("Moderation",
+                "`kick`, `ban`, `unban`, `timeout`, `purge`, `warn`, `warnings`, `clearwarns`, "
+                "`lock`, `unlock`, `slowmode`, `snipe`");
+    e.add_field("Information",
+                "`ping`, `help`, `botinfo`, `serverinfo`, `userinfo`, `avatar`, `servericon`, "
+                "`roleinfo`, `invite`, `sync`");
+    e.add_field("Server settings",
                 "`settings show`, `settings logchannel`, `settings welcome`, `settings welcomemessage`, "
                 "`settings leveling`, `settings levelupchannel`, `settings levelupmessage`, "
                 "`settings rewardadd`, `settings rewardremove`, `settings warnthreshold`, "
                 "`settings warnaction`, `settings warntimeout`, `settings xpmult`, "
-                "`settings xpmultremove`, `settings xpboost`");
-    e.add_field("📈 Levels",
-                "`rank`, `top` — earn XP by chatting (per-server on/off via `/settings leveling`)");
-    e.add_field("🎉 Fun",
+                "`settings xpmultremove`, `settings xpboost`, `settings autorole`, `settings auditlog`");
+    e.add_field("Levels & Economy",
+                "`rank`, `top`, `balance`, `daily`, `pay`, `work`, `gamble` — earn XP by chatting "
+                "and coins by working, then gamble them away.");
+    e.add_field("Engagement",
+                "`reactionrole`, `ticket`, `giveaway`, `poll`, `cc` — role menus, support tickets, "
+                "giveaways, polls and custom commands.");
+    e.add_field("Fun",
                 "`8ball`, `coinflip`, `dice`, `say`, `embed`");
-    e.add_field("📌 Tip",
+    e.add_field("Note",
                 "Moderation commands require the matching Discord permission "
-                "(`Kick Members`, `Ban Members`, `Moderate Members`, `Manage Messages`). "
-                "All `/settings` values are per-server.");
+                "(`Kick Members`, `Ban Members`, `Moderate Members`, `Manage Channels`, "
+                "`Manage Messages`). All `/settings` values are per-server.");
 
     co_await event.co_reply(dpp::message(e));
     co_return;
@@ -98,7 +104,10 @@ dpp::task<void> cmd_botinfo(dpp::cluster& bot, const dpp::slashcommand_t& event)
     }
 
     dpp::embed e = util::base_embed(bot, bot.me.username, util::COLOR_PRIMARY,
-                                    "A modern, feature-rich Discord bot built with the **D++** library.")
+                                    "I am a multi-purpose Discord bot built with the **D++** library. "
+                                    "I keep your server tidy with moderation tools, reward activity with "
+                                    "levels and coins, and engage members with tickets, giveaways, polls "
+                                    "and role menus — all configured per server.")
         .set_thumbnail(bot.me.get_avatar_url(512))
         .add_field("Uptime", bot.uptime().to_string(), true)
         .add_field("Servers", std::to_string(dpp::get_guild_count()), true)
@@ -211,7 +220,7 @@ dpp::task<void> cmd_userinfo(dpp::cluster& bot, const dpp::slashcommand_t& event
         .set_thumbnail(user->get_avatar_url(512))
         .set_description(in_guild && nickname != user->username
                              ? "Known as **" + util::escape(nickname) + "** here"
-                             : (user->is_bot() ? "🤖 This account is a bot." : "👤 Regular user."))
+                             : (user->is_bot() ? "This account is a bot." : "A regular member of Discord."))
         .add_field("User ID", std::to_string(static_cast<uint64_t>(user->id)), true)
         .add_field("Account created", util::rel_time(snowflake_time(user->id)), true)
         .add_field("Bot", user->is_bot() ? "Yes" : "No", true);
@@ -298,7 +307,7 @@ dpp::task<void> cmd_invite(dpp::cluster& bot, const dpp::slashcommand_t& event) 
                       "&permissions=" + std::to_string(perms) +
                       "&scope=bot%20applications.commands";
 
-    dpp::embed e = util::base_embed(bot, "🔗 Add me to your server!", util::COLOR_PRIMARY,
+    dpp::embed e = util::base_embed(bot, "Add Me to Your Server", util::COLOR_PRIMARY,
         "Click the button below to invite me to any server where you have **Manage Server** permission.\n\n"
         "The link already includes the `bot` and `applications.commands` scopes plus all the "
         "permissions needed for moderation — it works out of the box.");
@@ -356,7 +365,7 @@ dpp::task<void> cmd_sync(dpp::cluster& bot, const dpp::slashcommand_t& event) {
         co_return;
     }
 
-    dpp::embed e = util::base_embed(bot, "🔄 Commands Synced", util::COLOR_SUCCESS)
+    dpp::embed e = util::base_embed(bot, "Commands Synced", util::COLOR_SUCCESS)
         .set_description("Registered **" + std::to_string(commands.size()) + "** commands (" + scope + ").")
         .add_field("Note", target_guild ? "Guild commands update instantly."
                                         : "Global commands can take up to an hour to propagate to all servers.", true);

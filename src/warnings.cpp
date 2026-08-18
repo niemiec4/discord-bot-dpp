@@ -1,131 +1,75 @@
 #include "warnings.h"
 
-#include <dpp/json.h>
+#include "db.h"
 
-#include <fstream>
-#include <iostream>
-#include <sys/stat.h>
+#include <algorithm>
+#include <ctime>
 
 namespace warns {
 
-namespace {
-const std::string DATA_DIR = "data";
-const std::string FILE_PATH = DATA_DIR + "/warnings.json";
-
-// recursive so that save() can be called from within functions that
-// already hold the lock (add -> save).
-std::recursive_mutex mtx;
-nlohmann::json db = nlohmann::json::object();
-bool loaded = false;
-
-void ensure_dir() {
-#ifdef _WIN32
-    _mkdir(DATA_DIR.c_str());
-#else
-    mkdir(DATA_DIR.c_str(), 0755);
-#endif
-}
-
-std::string key(dpp::snowflake guild_id, dpp::snowflake user_id) {
-    return std::to_string(static_cast<uint64_t>(guild_id)) + ":" +
-           std::to_string(static_cast<uint64_t>(user_id));
-}
-} // namespace
-
 void load() {
-    std::lock_guard<std::recursive_mutex> lock(mtx);
-    if (loaded) {
-        return;
-    }
-    loaded = true;
-
-    std::ifstream file(FILE_PATH);
-    if (!file.is_open()) {
-        return; // no data yet, start empty
-    }
-    try {
-        file >> db;
-    } catch (const std::exception& e) {
-        std::cerr << "[warnings] Failed to parse " << FILE_PATH << ": " << e.what() << "\n";
-        db = nlohmann::json::object();
-    }
+    // Data now lives in SQLite (initialised by db::init in main).
 }
 
 void save() {
-    std::lock_guard<std::recursive_mutex> lock(mtx);
-    ensure_dir();
-    std::ofstream file(FILE_PATH, std::ios::trunc);
-    if (!file.is_open()) {
-        std::cerr << "[warnings] Could not open " << FILE_PATH << " for writing.\n";
-        return;
-    }
-    file << db.dump(4);
+    // Data now lives in SQLite (initialised by db::init in main).
 }
 
 size_t add(dpp::snowflake guild_id, dpp::snowflake user_id,
            const std::string& reason, dpp::snowflake moderator) {
-    std::lock_guard<std::recursive_mutex> lock(mtx);
-
-    nlohmann::json& guild_arr = db[key(guild_id, user_id)];
-
-    uint64_t next_id = 1;
-    if (guild_arr.is_array()) {
-        for (const auto& w : guild_arr) {
-            next_id = std::max(next_id, w.value("id", uint64_t(0)) + 1);
+    // Next warning id within the guild+user pair.
+    int64_t next_id = 1;
+    {
+        db::stmt max_id("SELECT COALESCE(MAX(id), 0) + 1 FROM warnings WHERE guild_id = ? AND user_id = ?");
+        max_id.bind(1, static_cast<int64_t>(guild_id));
+        max_id.bind(2, static_cast<int64_t>(user_id));
+        if (max_id.step()) {
+            next_id = max_id.col_int(0);
         }
-    } else {
-        guild_arr = nlohmann::json::array();
     }
 
-    guild_arr.push_back(nlohmann::json{
-        {"id", next_id},
-        {"moderator", static_cast<uint64_t>(moderator)},
-        {"reason", reason},
-        {"date", static_cast<uint64_t>(time(nullptr))}
-    });
+    db::stmt ins("INSERT INTO warnings (guild_id, user_id, id, moderator, reason, date) VALUES (?,?,?,?,?,?)");
+    ins.bind(1, static_cast<int64_t>(guild_id));
+    ins.bind(2, static_cast<int64_t>(user_id));
+    ins.bind(3, next_id);
+    ins.bind(4, static_cast<int64_t>(moderator));
+    ins.bind(5, reason);
+    ins.bind(6, static_cast<int64_t>(time(nullptr)));
+    ins.step();
 
-    save();
-    return guild_arr.size();
+    return static_cast<size_t>(count(guild_id, user_id));
 }
 
 std::vector<entry> get(dpp::snowflake guild_id, dpp::snowflake user_id) {
-    std::lock_guard<std::recursive_mutex> lock(mtx);
     std::vector<entry> out;
-
-    auto it = db.find(key(guild_id, user_id));
-    if (it == db.end() || !it->is_array()) {
-        return out;
-    }
-    for (const auto& w : *it) {
+    db::stmt s("SELECT id, moderator, reason, date FROM warnings "
+               "WHERE guild_id = ? AND user_id = ? ORDER BY id ASC");
+    s.bind(1, static_cast<int64_t>(guild_id));
+    s.bind(2, static_cast<int64_t>(user_id));
+    while (s.step()) {
         out.push_back(entry{
-            w.value("id", uint64_t(0)),
-            dpp::snowflake{w.value("moderator", uint64_t(0))},
-            w.value("reason", std::string()),
-            static_cast<time_t>(w.value("date", uint64_t(0)))
+            static_cast<uint64_t>(s.col_int(0)),
+            dpp::snowflake{static_cast<uint64_t>(s.col_int(1))},
+            s.col_text(2),
+            static_cast<time_t>(s.col_int(3))
         });
     }
     return out;
 }
 
 size_t count(dpp::snowflake guild_id, dpp::snowflake user_id) {
-    std::lock_guard<std::recursive_mutex> lock(mtx);
-    auto it = db.find(key(guild_id, user_id));
-    if (it == db.end() || !it->is_array()) {
-        return 0;
-    }
-    return it->size();
+    db::stmt s("SELECT COUNT(*) FROM warnings WHERE guild_id = ? AND user_id = ?");
+    s.bind(1, static_cast<int64_t>(guild_id));
+    s.bind(2, static_cast<int64_t>(user_id));
+    return s.step() ? static_cast<size_t>(s.col_int(0)) : 0;
 }
 
 size_t clear(dpp::snowflake guild_id, dpp::snowflake user_id) {
-    std::lock_guard<std::recursive_mutex> lock(mtx);
-    auto it = db.find(key(guild_id, user_id));
-    if (it == db.end()) {
-        return 0;
-    }
-    size_t removed = it->is_array() ? it->size() : 0;
-    db.erase(it);
-    save();
-    return removed;
+    db::stmt del("DELETE FROM warnings WHERE guild_id = ? AND user_id = ?");
+    del.bind(1, static_cast<int64_t>(guild_id));
+    del.bind(2, static_cast<int64_t>(user_id));
+    del.step();
+    return static_cast<size_t>(db::changes());
 }
 
 } // namespace warns

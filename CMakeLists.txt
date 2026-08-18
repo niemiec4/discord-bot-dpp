@@ -30,22 +30,46 @@ if(DPP_LIBS_MISSING)
     endif()
 endif()
 
+# SQLite: system library has no dev symlink here, find the actual .so.
+find_library(SQLITE3_LIB NAMES sqlite3 libsqlite3.so.0 libsqlite3.so)
+if(NOT SQLITE3_LIB)
+    message(FATAL_ERROR "libsqlite3 not found — install it (e.g. apt install libsqlite3-0)")
+endif()
+message(STATUS "SQLite library: ${SQLITE3_LIB}")
+
 add_executable(discord_bot
     main.cpp
     src/config.cpp
     src/bot_utils.cpp
+    src/db.cpp
     src/warnings.cpp
+    src/settings.cpp
+    src/levels.cpp
     src/commands.cpp
     src/cmd_moderation.cpp
     src/cmd_utility.cpp
     src/cmd_fun.cpp
-    src/settings.cpp
-    src/levels.cpp
     src/cmd_settings.cpp
     src/cmd_levels.cpp
+    src/economy.cpp
+    src/custom_commands.cpp
+    src/role_menus.cpp
+    src/giveaways.cpp
+    src/tickets.cpp
+    src/polls.cpp
+    src/snipes.cpp
+    src/auditlog.cpp
+    src/interactions.cpp
+    src/cmd_economy.cpp
+    src/cmd_custom.cpp
+    src/cmd_rolemenu.cpp
+    src/cmd_tickets.cpp
+    src/cmd_giveaways.cpp
+    src/cmd_polls.cpp
+    src/cmd_mod_extra.cpp
 )
 
-target_link_libraries(discord_bot PRIVATE dpp::dpp)
+target_link_libraries(discord_bot PRIVATE dpp::dpp ${SQLITE3_LIB})
 
 if(NOT MSVC)
     target_compile_options(discord_bot PRIVATE -Wall -Wextra)

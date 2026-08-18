@@ -10,6 +10,13 @@ std::vector<dpp::slashcommand> build_definitions(const dpp::cluster& bot) {
     add_fun_commands(bot, definitions, discard);
     add_settings_commands(bot, definitions, discard);
     add_level_commands(bot, definitions, discard);
+    add_economy_commands(bot, definitions, discard);
+    add_custom_commands(bot, definitions, discard);
+    add_rolemenu_commands(bot, definitions, discard);
+    add_ticket_commands(bot, definitions, discard);
+    add_giveaway_commands(bot, definitions, discard);
+    add_poll_commands(bot, definitions, discard);
+    add_mod_extra_commands(bot, definitions, discard);
     return definitions;
 }
 
@@ -25,6 +32,13 @@ std::unordered_map<std::string, handler_t> build_handlers() {
     add_fun_commands(dummy, definitions, handlers);
     add_settings_commands(dummy, definitions, handlers);
     add_level_commands(dummy, definitions, handlers);
+    add_economy_commands(dummy, definitions, handlers);
+    add_custom_commands(dummy, definitions, handlers);
+    add_rolemenu_commands(dummy, definitions, handlers);
+    add_ticket_commands(dummy, definitions, handlers);
+    add_giveaway_commands(dummy, definitions, handlers);
+    add_poll_commands(dummy, definitions, handlers);
+    add_mod_extra_commands(dummy, definitions, handlers);
     return handlers;
 }
 

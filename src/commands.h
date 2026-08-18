@@ -63,6 +63,34 @@ void add_level_commands(const dpp::cluster& bot,
                         std::vector<dpp::slashcommand>& definitions,
                         std::unordered_map<std::string, handler_t>& handlers);
 
+void add_economy_commands(const dpp::cluster& bot,
+                          std::vector<dpp::slashcommand>& definitions,
+                          std::unordered_map<std::string, handler_t>& handlers);
+
+void add_custom_commands(const dpp::cluster& bot,
+                         std::vector<dpp::slashcommand>& definitions,
+                         std::unordered_map<std::string, handler_t>& handlers);
+
+void add_rolemenu_commands(const dpp::cluster& bot,
+                           std::vector<dpp::slashcommand>& definitions,
+                           std::unordered_map<std::string, handler_t>& handlers);
+
+void add_ticket_commands(const dpp::cluster& bot,
+                         std::vector<dpp::slashcommand>& definitions,
+                         std::unordered_map<std::string, handler_t>& handlers);
+
+void add_giveaway_commands(const dpp::cluster& bot,
+                           std::vector<dpp::slashcommand>& definitions,
+                           std::unordered_map<std::string, handler_t>& handlers);
+
+void add_poll_commands(const dpp::cluster& bot,
+                       std::vector<dpp::slashcommand>& definitions,
+                       std::unordered_map<std::string, handler_t>& handlers);
+
+void add_mod_extra_commands(const dpp::cluster& bot,
+                            std::vector<dpp::slashcommand>& definitions,
+                            std::unordered_map<std::string, handler_t>& handlers);
+
 /** @brief All slash command definitions ready for Discord registration. */
 std::vector<dpp::slashcommand> build_definitions(const dpp::cluster& bot);
 

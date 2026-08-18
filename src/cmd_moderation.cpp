@@ -49,7 +49,7 @@ dpp::task<void> cmd_kick(dpp::cluster& bot, const dpp::slashcommand_t& event) {
         co_return;
     }
 
-    dpp::embed e = util::base_embed(bot, "👢 Member Kicked", util::COLOR_WARNING)
+    dpp::embed e = util::base_embed(bot, "Member Kicked", util::COLOR_WARNING)
         .set_description("**" + name + "** has been kicked from the server.")
         .add_field("Moderator", event.command.usr.get_mention(), true)
         .add_field("Reason", reason.empty() ? "No reason provided" : util::escape(reason), true);
@@ -97,7 +97,7 @@ dpp::task<void> cmd_ban(dpp::cluster& bot, const dpp::slashcommand_t& event) {
         co_return;
     }
 
-    dpp::embed e = util::base_embed(bot, "🔨 Member Banned", util::COLOR_ERROR)
+    dpp::embed e = util::base_embed(bot, "Member Banned", util::COLOR_ERROR)
         .set_description("**" + name + "** has been banned from the server.")
         .add_field("Moderator", event.command.usr.get_mention(), true)
         .add_field("Reason", reason.empty() ? "No reason provided" : util::escape(reason), true);
@@ -130,7 +130,7 @@ dpp::task<void> cmd_unban(dpp::cluster& bot, const dpp::slashcommand_t& event) {
         co_return;
     }
 
-    dpp::embed e = util::base_embed(bot, "🔓 User Unbanned", util::COLOR_SUCCESS)
+    dpp::embed e = util::base_embed(bot, "User Unbanned", util::COLOR_SUCCESS)
         .set_description("<@" + std::to_string(static_cast<uint64_t>(target_id)) + "> has been unbanned.")
         .add_field("Moderator", event.command.usr.get_mention(), true);
 
@@ -182,7 +182,7 @@ dpp::task<void> cmd_timeout(dpp::cluster& bot, const dpp::slashcommand_t& event)
         co_return;
     }
 
-    dpp::embed e = util::base_embed(bot, "🔇 User Timed Out", util::COLOR_WARNING)
+    dpp::embed e = util::base_embed(bot, "User Timed Out", util::COLOR_WARNING)
         .set_description("**" + name + "** has been timed out.")
         .add_field("Duration", util::format_duration(seconds), true)
         .add_field("Expires", util::rel_time(until), true)
@@ -266,7 +266,7 @@ dpp::task<void> cmd_purge(dpp::cluster& bot, const dpp::slashcommand_t& event) {
         co_return;
     }
 
-    dpp::embed e = util::base_embed(bot, "🧹 Messages Purged", util::COLOR_SUCCESS)
+    dpp::embed e = util::base_embed(bot, "Messages Purged", util::COLOR_SUCCESS)
         .set_description("Deleted **" + std::to_string(ids.size()) + "** message(s).")
         .add_field("Channel", "<#" + std::to_string(static_cast<uint64_t>(channel_id)) + ">", true)
         .add_field("Moderator", event.command.usr.get_mention(), true);
@@ -318,21 +318,21 @@ dpp::task<void> cmd_warn(dpp::cluster& bot, const dpp::slashcommand_t& event) {
                 dpp::confirmation_callback_t res = co_await bot.co_guild_member_timeout(guild->id, target_id, until);
                 punishment = res.is_error()
                     ? "auto-timeout failed (" + res.get_error().human_readable + ")"
-                    : "🔇 auto-timed out for " + std::to_string(minutes) + " minute(s)";
+                    : "auto-timed out for " + std::to_string(minutes) + " minute(s)";
                 break;
             }
             case 2: { // kick
                 dpp::confirmation_callback_t res = co_await bot.co_guild_member_delete(guild->id, target_id);
                 punishment = res.is_error()
                     ? "auto-kick failed (" + res.get_error().human_readable + ")"
-                    : "👢 auto-kicked";
+                    : "auto-kicked";
                 break;
             }
             case 3: { // ban
                 dpp::confirmation_callback_t res = co_await bot.co_guild_ban_add(guild->id, target_id);
                 punishment = res.is_error()
                     ? "auto-ban failed (" + res.get_error().human_readable + ")"
-                    : "🔨 auto-banned";
+                    : "auto-banned";
                 break;
             }
             default:
@@ -340,7 +340,7 @@ dpp::task<void> cmd_warn(dpp::cluster& bot, const dpp::slashcommand_t& event) {
         }
     }
 
-    dpp::embed e = util::base_embed(bot, "⚠️ User Warned", util::COLOR_WARNING)
+    dpp::embed e = util::base_embed(bot, "User Warned", util::COLOR_WARNING)
         .set_description("**" + name + "** has been warned.")
         .add_field("Moderator", event.command.usr.get_mention(), true)
         .add_field("Reason", reason.empty() ? "No reason provided" : util::escape(reason), true)
@@ -369,12 +369,12 @@ dpp::task<void> cmd_warnings(dpp::cluster& bot, const dpp::slashcommand_t& event
                             : "<@" + std::to_string(static_cast<uint64_t>(target_id)) + ">";
     std::vector<warns::entry> entries = warns::get(guild->id, target_id);
 
-    dpp::embed e = util::base_embed(bot, "📋 Warnings", util::COLOR_PRIMARY,
+    dpp::embed e = util::base_embed(bot, "Warnings", util::COLOR_PRIMARY,
                                     "**" + name + "** has **" + std::to_string(entries.size()) +
                                     "** warning(s).");
 
     if (entries.empty()) {
-        e.set_description(e.description + "\n\n🎉 No warnings — clean record!");
+        e.set_description(e.description + "\n\nNo warnings — clean record.");
     } else {
         std::string fields;
         for (const auto& w : entries) {
@@ -405,7 +405,7 @@ dpp::task<void> cmd_clearwarns(dpp::cluster& bot, const dpp::slashcommand_t& eve
         co_return;
     }
 
-    dpp::embed e = util::base_embed(bot, "🧾 Warnings Cleared", util::COLOR_SUCCESS)
+    dpp::embed e = util::base_embed(bot, "Warnings Cleared", util::COLOR_SUCCESS)
         .set_description("Removed **" + std::to_string(removed) + "** warning(s) from <@" +
                          std::to_string(static_cast<uint64_t>(target_id)) + ">.")
         .add_field("Moderator", event.command.usr.get_mention(), true);

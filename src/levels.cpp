@@ -1,85 +1,39 @@
 #include "levels.h"
 
 #include "bot_utils.h"
+#include "db.h"
 #include "settings.h"
-
-#include <dpp/json.h>
 
 #include <algorithm>
 #include <cmath>
-#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <random>
-#include <sys/stat.h>
+#include <unordered_map>
 
 namespace levels {
 
 namespace {
-const std::string DATA_DIR = "data";
-const std::string FILE_PATH = DATA_DIR + "/levels.json";
-
-// recursive so that save() can be called from within functions that
-// already hold the lock (add_xp -> save).
-std::recursive_mutex mtx;
-nlohmann::json db = nlohmann::json::object();
-bool loaded = false;
-
-// Per-user XP cooldown: one gain per user per 60 seconds.
+// Per-user XP cooldown: one gain per user per 10 seconds (in-memory only).
+std::mutex cooldown_mtx;
 std::unordered_map<dpp::snowflake, time_t> last_gain;
-constexpr time_t XP_COOLDOWN = 60;
+constexpr time_t XP_COOLDOWN = 10;
 
 // XP awarded per message: uniform between 5 and 15.
 constexpr uint64_t XP_MIN = 5;
 constexpr uint64_t XP_MAX = 15;
-
-void ensure_dir() {
-#ifdef _WIN32
-    _mkdir(DATA_DIR.c_str());
-#else
-    mkdir(DATA_DIR.c_str(), 0755);
-#endif
-}
-
-std::string key(dpp::snowflake guild_id, dpp::snowflake user_id) {
-    return std::to_string(static_cast<uint64_t>(guild_id)) + ":" +
-           std::to_string(static_cast<uint64_t>(user_id));
-}
 } // namespace
 
 void load() {
-    std::lock_guard<std::recursive_mutex> lock(mtx);
-    if (loaded) {
-        return;
-    }
-    loaded = true;
-
-    std::ifstream file(FILE_PATH);
-    if (!file.is_open()) {
-        return;
-    }
-    try {
-        file >> db;
-    } catch (const std::exception& e) {
-        std::cerr << "[levels] Failed to parse " << FILE_PATH << ": " << e.what() << "\n";
-        db = nlohmann::json::object();
-    }
+    // Data now lives in SQLite (initialised by db::init in main).
 }
 
 void save() {
-    std::lock_guard<std::recursive_mutex> lock(mtx);
-    ensure_dir();
-    std::ofstream file(FILE_PATH, std::ios::trunc);
-    if (!file.is_open()) {
-        std::cerr << "[levels] Could not open " << FILE_PATH << " for writing.\n";
-        return;
-    }
-    file << db.dump(4);
+    // Data now lives in SQLite (initialised by db::init in main).
 }
 
 uint64_t level_from_xp(uint64_t xp) {
     // Cumulative XP to reach level L is 50 * L * (L + 1).
-    // Solve for L: floor((sqrt(2500 + 200*xp) - 50) / 100).
     double root = std::sqrt(2500.0 + 200.0 * static_cast<double>(xp));
     double level = (root - 50.0) / 100.0;
     return level > 0 ? static_cast<uint64_t>(level) : 0;
@@ -90,13 +44,14 @@ uint64_t xp_for_level(uint64_t level) {
 }
 
 user_level get(dpp::snowflake guild_id, dpp::snowflake user_id) {
-    std::lock_guard<std::recursive_mutex> lock(mtx);
-
     user_level out;
-    auto it = db.find(key(guild_id, user_id));
-    if (it != db.end() && it->is_number_unsigned()) {
-        out.xp = it->get<uint64_t>();
+    db::stmt s("SELECT xp FROM levels WHERE guild_id = ? AND user_id = ?");
+    s.bind(1, static_cast<int64_t>(guild_id));
+    s.bind(2, static_cast<int64_t>(user_id));
+    if (s.step()) {
+        out.xp = static_cast<uint64_t>(s.col_int(0));
     }
+
     out.level = level_from_xp(out.xp);
     out.xp_into_level = out.xp - xp_for_level(out.level);
     uint64_t next = xp_for_level(out.level + 1);
@@ -107,41 +62,23 @@ user_level get(dpp::snowflake guild_id, dpp::snowflake user_id) {
 }
 
 uint64_t add_xp(dpp::snowflake guild_id, dpp::snowflake user_id, uint64_t amount) {
-    std::lock_guard<std::recursive_mutex> lock(mtx);
-
-    std::string k = key(guild_id, user_id);
-    uint64_t xp = db.value(k, uint64_t(0)) + amount;
-    db[k] = xp;
-    save();
-    return level_from_xp(xp);
+    db::stmt upsert("INSERT INTO levels (guild_id, user_id, xp) VALUES (?,?,?) "
+                    "ON CONFLICT(guild_id, user_id) DO UPDATE SET xp = xp + excluded.xp");
+    upsert.bind(1, static_cast<int64_t>(guild_id));
+    upsert.bind(2, static_cast<int64_t>(user_id));
+    upsert.bind(3, static_cast<int64_t>(amount));
+    upsert.step();
+    return level_from_xp(get(guild_id, user_id).xp);
 }
 
 std::vector<std::pair<dpp::snowflake, user_level>> top(dpp::snowflake guild_id, size_t limit) {
-    std::lock_guard<std::recursive_mutex> lock(mtx);
-
-    std::vector<std::pair<dpp::snowflake, uint64_t>> raw;
-    std::string prefix = std::to_string(static_cast<uint64_t>(guild_id)) + ":";
-    for (auto it = db.begin(); it != db.end(); ++it) {
-        if (it.key().rfind(prefix, 0) == 0 && it.value().is_number_unsigned()) {
-            std::string uid_str = it.key().substr(prefix.size());
-            try {
-                raw.emplace_back(dpp::snowflake{std::stoull(uid_str)}, it.value().get<uint64_t>());
-            } catch (...) {
-                // skip malformed entries
-            }
-        }
-    }
-
-    std::sort(raw.begin(), raw.end(),
-              [](const auto& a, const auto& b) { return a.second > b.second; });
-    if (raw.size() > limit) {
-        raw.resize(limit);
-    }
-
     std::vector<std::pair<dpp::snowflake, user_level>> out;
-    out.reserve(raw.size());
-    for (const auto& [id, xp] : raw) {
-        out.emplace_back(id, get(guild_id, id));
+    db::stmt s("SELECT user_id, xp FROM levels WHERE guild_id = ? ORDER BY xp DESC LIMIT ?");
+    s.bind(1, static_cast<int64_t>(guild_id));
+    s.bind(2, static_cast<int64_t>(limit));
+    while (s.step()) {
+        user_level info = get(guild_id, dpp::snowflake{static_cast<uint64_t>(s.col_int(0))});
+        out.emplace_back(dpp::snowflake{static_cast<uint64_t>(s.col_int(0))}, info);
     }
     return out;
 }
@@ -236,7 +173,7 @@ void handle_message(dpp::cluster& bot, const dpp::message& msg) {
 
     // Per-user cooldown.
     {
-        std::lock_guard<std::recursive_mutex> lock(mtx);
+        std::lock_guard<std::mutex> lock(cooldown_mtx);
         time_t now = time(nullptr);
         auto it = last_gain.find(msg.author.id);
         if (it != last_gain.end() && now - it->second < XP_COOLDOWN) {
@@ -277,7 +214,7 @@ void handle_message(dpp::cluster& bot, const dpp::message& msg) {
 
     std::string text = s.levelup_message;
     if (text.empty()) {
-        text = "🎉 {user} reached **level {level}**!";
+        text = "{user} reached **level {level}**.";
     }
     text = replace_all(text, "{user}", name);
     text = replace_all(text, "{level}", std::to_string(after));
@@ -285,7 +222,7 @@ void handle_message(dpp::cluster& bot, const dpp::message& msg) {
     dpp::snowflake channel_id = s.levelup_channel_id ? s.levelup_channel_id : msg.channel_id;
     dpp::embed e = dpp::embed()
         .set_color(util::COLOR_SUCCESS)
-        .set_title("⬆️ Level Up!")
+        .set_title("Level Up")
         .set_description(text)
         .set_timestamp(time(nullptr));
 
